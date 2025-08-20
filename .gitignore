@@ -7,3 +7,7 @@ datasets/*/processed_data/
 __pycache__/
 .vscode/
 *.vscode/
+
+*.zip
+
+outputs/

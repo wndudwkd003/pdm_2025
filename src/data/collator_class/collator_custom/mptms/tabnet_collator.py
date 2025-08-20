@@ -30,14 +30,13 @@ class MPTMSTabNetCollator(BaseCollator):
 
 
     def _flatten_jsons(self, json_paths: list[str]) -> np.ndarray:
-        ys: list[float] = []
+        ys: list[int] = []
         for p in json_paths:
             with open(p, "r", encoding="utf-8") as f:
                 d = json.load(f)
-            # annotations[0].tagging[0].state 사용 (문자열 "0"/"1" 등 가정)
-            state = d["annotations"][0]["tagging"][0]["state"]
-            ys.append(float(state))
-        return np.asarray(ys, dtype=np.float32)  # 1D
+            state = d["annotations"][0]["tagging"][0]["state"]  # "0"|"1"|"2"|"3"
+            ys.append(int(state))
+        return np.asarray(ys, dtype=np.int64)  # (T_out,)
 
 
     def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:

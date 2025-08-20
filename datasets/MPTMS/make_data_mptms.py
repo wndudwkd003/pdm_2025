@@ -24,8 +24,8 @@ VALIDATION_DATA = DATA_DIR / "Validation"
 SOURCE_DATA = "01.원천데이터"
 LABELING_DATA = "02.라벨링데이터"
 
-FORWARD = 12
-BACKWARD = 4
+FORWARD = 24
+BACKWARD = 6
 INTERVAL_SEC = 5
 
 def extract_datetime(file_path):
