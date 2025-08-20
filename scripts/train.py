@@ -13,7 +13,7 @@ cfg = Config()
 set_seeds(cfg.seed)
 
 
-def prepare_split_dataset(data_dir, train_folder, seed, split_ratio):
+def prepare_split_dataset(data_dir: str, train_folder: str, seed: int, split_ratio: float):
     train_data_dir = Path(data_dir) / train_folder
     jsonl_files = list(train_data_dir.glob("*.jsonl"))
     train_files, valid_files = train_test_split(jsonl_files, test_size=split_ratio, random_state=seed)
@@ -26,16 +26,14 @@ def save_history(history, save_path):
 
 
 def main():
+    save_dir = get_save_path(cfg.model_type, cfg.data_type, cfg.save_dir)
+
     train_files, valid_files = prepare_split_dataset(cfg.data_dir, cfg.train, cfg.seed, cfg.split_ratio)
     dataset_cls = DatasetManager.get_class(cfg.data_type)
 
     train_ds = dataset_cls(jsonl_files=train_files)
     valid_ds = dataset_cls(jsonl_files=valid_files)
     print(f"Train dataset size: {len(train_ds)}, Validation dataset size: {len(valid_ds)}")
-
-
-
-    save_dir = get_save_path(cfg.model_type, cfg.data_type, cfg.save_dir)
 
     trainer = TrainerManager.get_trainer(
         cfg.model_type,
