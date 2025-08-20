@@ -3,12 +3,11 @@ from pathlib import Path
 from typing import Any
 import json
 import numpy as np
-from torch.utils.data import DataLoader
 from xgboost import XGBClassifier
 
 from src.data.collator_class.collator_base.base_collator import BaseCollator
 from src.models.trainer.base_trainer.base_trainer import BaseTrainer
-
+from src.utils.metrics import compute_multitask_classification_metrics
 
 class XGBTrainer(BaseTrainer):
     def __init__(
@@ -31,7 +30,12 @@ class XGBTrainer(BaseTrainer):
         predictor: str = "gpu_predictor",
         random_state: int = 42,
     ):
-        super().__init__(work_dir=work_dir, data_collator=data_collator)
+        super().__init__(
+            work_dir=work_dir,
+            data_collator=data_collator,
+            collect_batch_size=collect_batch_size,
+            num_workers=num_workers,
+        )
         self.num_classes = num_classes
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
@@ -41,37 +45,15 @@ class XGBTrainer(BaseTrainer):
         self.reg_lambda = reg_lambda
         self.reg_alpha = reg_alpha
         self.early_stopping_rounds = early_stopping_rounds
-        self.num_workers = num_workers
-        self.collect_batch_size = collect_batch_size
         self.tree_method = tree_method
         self.predictor = predictor
         self.random_state = random_state
 
         self.models: list[XGBClassifier] = []
 
-    def _dataset_to_numpy(self, dataset) -> tuple[np.ndarray, np.ndarray]:
-        loader = DataLoader(
-            dataset,
-            batch_size=self.collect_batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False,
-            persistent_workers=False,
-            collate_fn=self.data_collator,
-            drop_last=False,
-        )
-        Xs: list[np.ndarray] = []
-        Ys: list[np.ndarray] = []
-        for batch in loader:
-            Xs.append(batch["x"].cpu().numpy())          # (B, D)
-            Ys.append(batch["y"].cpu().numpy())          # (B, T_out)
-        X = np.concatenate(Xs, axis=0)                   # (N, D)
-        Y = np.concatenate(Ys, axis=0).astype(np.int64)  # (N, T_out)
-        return X, Y
-
     def fit(self, train_dataset, valid_dataset):
-        X_tr, y_tr = self._dataset_to_numpy(train_dataset)
-        X_va, y_va = self._dataset_to_numpy(valid_dataset)
+        X_tr, y_tr = self.dataset_to_numpy(train_dataset)
+        X_va, y_va = self.dataset_to_numpy(valid_dataset)
 
         T = y_tr.shape[1]
         self.models = []
@@ -92,15 +74,12 @@ class XGBTrainer(BaseTrainer):
                 predictor=self.predictor,
                 n_jobs=self.num_workers,
                 random_state=self.random_state,
-                # ↓↓↓ v3에서는 생성자에 넣습니다
-                eval_metric="mlogloss",
+                eval_metric="mlogloss",                      # v3: 생성자에 지정
                 early_stopping_rounds=self.early_stopping_rounds,
             )
             clf.fit(
                 X_tr, y_tr[:, t],
                 eval_set=[(X_tr, y_tr[:, t]), (X_va, y_va[:, t])],
-                # eval_metric/early_stopping_rounds 인자는 제거
-                # verbose 인자도 생략(원하시면 남겨도 무방)
             )
             self.models.append(clf)
 
@@ -112,26 +91,13 @@ class XGBTrainer(BaseTrainer):
         return history
 
     def eval(self, test_dataset) -> dict[str, Any]:
-        X_te, y_te = self._dataset_to_numpy(test_dataset)   # (N,D), (N,T)
-        T = y_te.shape[1]
-
+        X_te, y_te = self.dataset_to_numpy(test_dataset)
         preds: list[np.ndarray] = []
-        for t in range(T):
-            p = self.models[t].predict(X_te)                # (N,)
+        for t in range(y_te.shape[1]):
+            p = self.models[t].predict(X_te)
             preds.append(p)
-        y_pred = np.stack(preds, axis=1).astype(np.int64)   # (N, T)
-
-        per_step: list[float] = []
-        for j in range(T):
-            per_step.append(float((y_te[:, j] == y_pred[:, j]).mean()))
-        overall = float((y_te == y_pred).mean())
-
-        return {
-            "overall_accuracy": overall,
-            "per_step_accuracy": per_step,
-            "num_samples": int(y_te.shape[0]),
-            "num_tasks": int(T),
-        }
+        y_pred = np.stack(preds, axis=1).astype(np.int64)
+        return compute_multitask_classification_metrics(y_te, y_pred)
 
     def save(self, save_path: Path):
         save_path.mkdir(parents=True, exist_ok=True)

@@ -13,9 +13,9 @@ class Config:
     test: str = "test"
     split_ratio: float = 0.2
 
-    model_type: ModelType = ModelType.XGBOOST
+    model_type: ModelType = ModelType.TABNET
 
     save_dir: str = "outputs"
 
 
-    load_model: str = "outputs/xgboost_mptms_2025-08-20_20-32-03"
+    load_model: str = "outputs/xgboost_mptms_2025-08-20_20-43-21"

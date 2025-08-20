@@ -24,9 +24,9 @@ VALIDATION_DATA = DATA_DIR / "Validation"
 SOURCE_DATA = "01.원천데이터"
 LABELING_DATA = "02.라벨링데이터"
 
-FORWARD = 24
-BACKWARD = 6
-INTERVAL_SEC = 5
+FORWARD = 30 # 90초-> 1분 30초
+BACKWARD = 10 # 30초
+INTERVAL_SEC = 3 # 초
 
 def extract_datetime(file_path):
     """파일명에서 datetime 추출"""
