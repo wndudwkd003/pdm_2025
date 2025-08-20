@@ -1,2 +1,7 @@
-data/
-processed_data/
+datasets/*/data/
+datasets/*/processed_data/
+
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
