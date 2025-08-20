@@ -5,14 +5,10 @@ from src.data.dataset_manager import DatasetManager
 from src.data.collator_manager import CollatorManager
 from src.models.trainer_manager import TrainerManager
 from src.utils.path_util import get_save_path
-import json
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from src.utils.history_viz import save_history_artifacts
-
-
-cfg = Config()
-set_seeds(cfg.seed)
+from argparse import ArgumentParser
 
 
 def prepare_split_dataset(data_dir: str, train_folder: str, seed: int, split_ratio: float):
@@ -23,8 +19,11 @@ def prepare_split_dataset(data_dir: str, train_folder: str, seed: int, split_rat
     return train_files, valid_files
 
 
-def main():
-    save_dir = get_save_path(cfg.model_type, cfg.data_type, cfg.save_dir)
+def main(cfg: Config):
+    save_dir = get_save_path(
+        cfg.model_type, cfg.data_type, cfg.save_dir,
+        cfg.masking_ratio, cfg.masking_mode
+    )
 
     train_files, valid_files = prepare_split_dataset(cfg.data_dir, cfg.train, cfg.seed, cfg.split_ratio)
     dataset_cls = DatasetManager.get_class(cfg.data_type)
@@ -36,7 +35,14 @@ def main():
     trainer = TrainerManager.get_trainer(
         cfg.model_type,
         work_dir=save_dir,
-        data_collator=CollatorManager.get_collator(cfg.data_type, cfg.model_type),
+        data_collator=CollatorManager.get_collator(cfg.data_type, cfg.model_type)(
+            masking_ratio=cfg.masking_ratio,
+            masking_mode=cfg.masking_mode,
+            append_mask_indicator=cfg.append_mask_indicator,
+            mask_fill=cfg.mask_fill,
+            csv_has_header=cfg.csv_has_header,
+            seed=cfg.seed,
+        ),
     )
 
     history = trainer.fit(train_dataset=train_ds, valid_dataset=valid_ds)
@@ -45,8 +51,19 @@ def main():
 
     save_path = trainer.save(save_dir / "final")
 
-    print(f"Training completed and model saved to {save_path}")
+    print(f"Training completed and model saved to {save_path.absolute()}")
 
 
 if __name__ == "__main__":
-    main()
+    cfg = Config()
+
+    parser = ArgumentParser(description="Training script for the model.")
+    parser.add_argument("--masking-ratio", type=float, default=cfg.masking_ratio)
+    args = parser.parse_args()
+
+    cfg.masking_ratio = args.masking_ratio
+    set_seeds(cfg.seed)
+
+    print(f"Using masking ratio: {cfg.masking_ratio}")
+
+    main(cfg)

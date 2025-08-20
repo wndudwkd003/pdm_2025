@@ -1,3 +1,5 @@
+# configs/config.py
+
 from dataclasses import dataclass, field
 from configs.params.data import DatasetType
 from configs.params.model import ModelType
@@ -17,5 +19,20 @@ class Config:
 
     save_dir: str = "outputs"
 
+    # 마스킹 비율
+    masking_ratio: float = 0.1
 
-    load_model: str = "outputs/xgboost_mptms_2025-08-20_21-03-15"
+    # "none" | "mcar" | "block_t" | "per_sensor"
+    masking_mode: str = "per_sensor"
+
+    # True면 x 뒤에 마스크 인디케이터 붙임
+    append_mask_indicator: bool = False
+
+    # 마스킹 채움값
+    mask_fill: float = -100.0
+
+    csv_has_header: bool = True
+
+
+    # === Test용 모델 로드 경로 ===
+    load_model: str = "outputs/2025-08-20_21-49-18_xgboost_mptms_per_sensor_0.1"

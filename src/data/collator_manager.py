@@ -11,7 +11,5 @@ class CollatorManager:
         if key not in COLLATOR_MAP:
             raise ValueError(f"지원하지 않는 데이터 타입 또는 모델 타입입니다: {key}")
 
-        collator_cls = COLLATOR_MAP[key]()
-
-        return collator_cls()
+        return COLLATOR_MAP[key]()
 
