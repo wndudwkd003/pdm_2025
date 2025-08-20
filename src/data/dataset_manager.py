@@ -1,4 +1,5 @@
-from configs.params.data import DatasetType, DATASET_MAP
+from configs.params.data import DatasetType
+from configs.maps.data_maps import DATASET_MAP
 
 class DatasetManager:
     @staticmethod
@@ -6,5 +7,6 @@ class DatasetManager:
         if data_type not in DATASET_MAP:
             raise ValueError(f"Dataset type {data_type} is not registered.")
 
-        return DATASET_MAP[data_type]
+        data_cls = DATASET_MAP[data_type]()
+        return data_cls
 

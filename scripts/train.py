@@ -2,7 +2,7 @@
 from src.utils.seeds import set_seeds
 from configs.config import Config
 from src.data.dataset_manager import DatasetManager
-from src.data.collator_manager import DataCollatorManager
+from src.data.collator_manager import CollatorManager
 from src.models.trainer_manager import TrainerManager
 from src.utils.path_util import get_save_path
 
@@ -33,12 +33,14 @@ def main():
     valid_ds = dataset_cls(jsonl_files=valid_files)
     print(f"Train dataset size: {len(train_ds)}, Validation dataset size: {len(valid_ds)}")
 
+
+
     save_dir = get_save_path(cfg.model_type, cfg.data_type, cfg.save_dir)
 
     trainer = TrainerManager.get_trainer(
         cfg.model_type,
-        work_dir=save_dir
-        data_collator=train_ds.data_collator,
+        work_dir=save_dir,
+        data_collator=CollatorManager.get_collator(cfg.data_type, cfg.model_type),
     )
 
     history = trainer.fit(
