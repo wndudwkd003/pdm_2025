@@ -45,7 +45,7 @@ def main():
 
     save_path = trainer.save(save_dir / "final")
 
-    print(f"Training completed and model saved to {save_dir}")
+    print(f"Training completed and model saved to {save_path}")
 
 
 if __name__ == "__main__":
