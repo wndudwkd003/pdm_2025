@@ -63,7 +63,7 @@ class NODETrainer(BaseTrainer):
         assert len(self.step_feature_names) == D, "feature name count mismatch"
 
         dfX = pd.DataFrame(X, columns=self.step_feature_names)
-        dfY = pd.DataFrame(Y, columns=self.model_config.target_names).astype("int8")
+        dfY = pd.DataFrame(Y, columns=self.model_config.target_names).astype("int64")
         return pd.concat([dfX, dfY], axis=1)
 
 
@@ -80,24 +80,23 @@ class NODETrainer(BaseTrainer):
         df_valid = self._to_dataframe(X_va, Y_va)
 
 
-
         data_config = DataConfig(
-            target=self.model_config.target_names,           # 멀티 타깃
-            continuous_cols=self.step_feature_names,         # 실제 D개 컬럼명
-            categorical_cols=self.model_config.categorical_cols,  # 지금은 []
+            target=self.model_config.target_names,
+            continuous_cols=self.step_feature_names,
+            categorical_cols=self.model_config.categorical_cols,
+            num_workers= self.model_config.num_workers,
         )
-
-        head_config = LinearHeadConfig(
-            layers="", # No additional layer in head, just a mapping layer to output_dim
-            dropout=0.1,
-            initialization="kaiming"
-        ).__dict__ # Convert to dict to pass to the model config (OmegaConf doesn't accept objects)
 
 
         model_cfg = NodeConfig(
             task="classification",
-            metrics=["f1_score","accuracy","auroc"],
-            metrics_prob_input=[False, False, True],
+            metrics=["f1_score", "accuracy", "auroc"],
+            metrics_prob_input=[False, False, True],   # f1/acc는 라벨, auroc은 proba
+            metrics_params=[
+                {"average": "macro", "num_classes": self.model_config.num_classes},  # f1_score
+                {},                                                                  # accuracy
+                {"average": "macro", "num_classes": self.model_config.num_classes},  # auroc
+            ],
             learning_rate=self.model_config.learning_rate,
         )
 
@@ -108,12 +107,14 @@ class NODETrainer(BaseTrainer):
             early_stopping_patience=self.model_config.early_stopping_patience,
             early_stopping_mode=self.model_config.early_stopping_mode,
             auto_lr_find=False,
-
+            checkpoints_path=str(self.work_dir / "checkpoints"),
+            trainer_kwargs={
+                "default_root_dir": str(self.work_dir)
+            },
         )
 
         optimizer_config = OptimizerConfig(
             optimizer="torch.optim.AdamW",
-            optimizer_params={"betas": (0.9, 0.999)},
             lr_scheduler="CosineAnnealingWarmRestarts",
             lr_scheduler_params={"T_0": 10, "T_mult": 1, "eta_min": 1e-5},
         )
@@ -125,7 +126,6 @@ class NODETrainer(BaseTrainer):
             trainer_config=trainer_config,
         )
 
-
         self.tabular_model.fit(train=df_train, validation=df_valid)
 
         return {
@@ -134,7 +134,6 @@ class NODETrainer(BaseTrainer):
             "features": self.step_feature_names,
             "targets": self.model_config.target_names,
         }
-
 
 
     def eval(self, test_dataset) -> dict[str, Any]:

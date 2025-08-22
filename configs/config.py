@@ -20,10 +20,10 @@ class Config:
     save_dir: str = "outputs"
 
     # 마스킹 비율
-    masking_ratio: float = 0.2
+    masking_ratio: float = 0.0
 
     # "none" | "mcar" | "block_t" | "per_sensor"
-    masking_mode: str = "mcar"
+    masking_mode: str = "none"
 
     # True면 x 뒤에 마스크 인디케이터 붙임
     append_mask_indicator: bool = False

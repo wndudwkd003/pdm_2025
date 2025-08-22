@@ -7,7 +7,7 @@ from typing import Sequence
 class BaseModelConfig:
     seed: int = 42
     batch_size: int = 64
-    num_workers: int = 4
+    num_workers: int = 30
     drop_last: bool = True
     pin_memory: bool = True
     max_epochs: int = 100
@@ -36,8 +36,6 @@ class NODEConfig(BaseModelConfig):
     continuous_cols: Sequence[str] = ()
     categorical_cols: Sequence[str] = ()
     target_names: Sequence[str] = ()
-    layers: str = "1024-512-512"
-    activation: str = "LeakyReLU"
     early_stopping: str = "valid_loss"
     early_stopping_mode: str = "min"
     early_stopping_patience: int = BaseModelConfig.patience_count

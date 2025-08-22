@@ -1,4 +1,6 @@
 # main.py
+import torch
+torch.set_float32_matmul_precision("high")  # 또는 "medium"
 from src.utils.seeds import set_seeds
 from configs.config import Config
 from src.data.dataset_manager import DatasetManager
