@@ -1,38 +1,53 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Generic, TypeVar
 from pathlib import Path
 import numpy as np
 from torch.utils.data import DataLoader
 from src.data.collator_class.collator_base.base_collator import BaseCollator
+from configs.model.model_configs import BaseModelConfig
 
-class BaseTrainer:
+
+class BaseTrainer(ABC):
     def __init__(
         self,
-        work_dir: Path,
-        data_collator,
         *,
-        collect_batch_size: int = 64,
-        num_workers: int = 4,
+        work_dir: Path,
+        data_collator: BaseCollator,
+        model_config: BaseModelConfig,
+        metadata: dict[str, Any] = None
     ):
+        self.model = None
+        self.models = []
         self.work_dir = Path(work_dir)
         self.data_collator = data_collator
-        self.collect_batch_size = collect_batch_size
-        self.num_workers = num_workers
+        self.model_config = model_config
+        self.metadata = metadata
 
-    def make_loader(self, dataset, *, batch_size: int | None = None, shuffle: bool = False):
-        bs = self.collect_batch_size if batch_size is None else batch_size
+
+    def make_loader(
+        self,
+        dataset,
+        shuffle: bool = False, # validation 시 False
+    ):
         return DataLoader(
             dataset,
-            batch_size=bs,
+            batch_size=self.model_config.batch_size,
             shuffle=shuffle,
-            num_workers=self.num_workers,
-            pin_memory=False,
+            num_workers=self.model_config.num_workers,
             collate_fn=self.data_collator,
-            drop_last=False,
+            drop_last=self.model_config.drop_last,
+            pin_memory=self.model_config.pin_memory,
         )
 
-    def dataset_to_numpy(self, dataset) -> tuple[np.ndarray, np.ndarray]:
-        loader = self.make_loader(dataset, batch_size=self.collect_batch_size, shuffle=False)
+    def _dataset_to_numpy(
+        self,
+        dataset,
+        shuffle: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        loader = self.make_loader(
+            dataset,
+            shuffle=shuffle
+        )
         Xs: list[np.ndarray] = []
         Ys: list[np.ndarray] = []
         for batch in loader:
@@ -43,8 +58,14 @@ class BaseTrainer:
         Y = Y.astype(np.int64)                    # 분류용 정수 레이블 가정
         return X, Y
 
+
+
     @abstractmethod
-    def fit(self, train_dataset, valid_dataset=None) -> dict[str, Any]:
+    def fit(
+        self,
+        train_dataset,
+        valid_dataset
+    ) -> dict[str, Any]:
         """모델 학습"""
         raise NotImplementedError("Subclasses should implement this method.")
 

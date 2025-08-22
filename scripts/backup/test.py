@@ -10,10 +10,6 @@ from src.utils.eval_viz import save_eval_artifacts
 from src.utils.history_viz import plot_history_from_model_dir
 
 from argparse import ArgumentParser
-from xgboost import XGBModel
-
-
-from src.models.core.tlf.tde import TreeDrivenEncoder
 
 LOAD_MODEL = None
 
@@ -43,18 +39,6 @@ def main(cfg: Config):
     )
 
     trainer.load(LOAD_MODEL / "final")
-
-    # model: XGBModel = trainer.models[0]
-    # trees = model.get_booster().get_dump(with_stats=False) # tree 내부 정보가 문자열로 반환됨
-    # tde = TreeDrivenEncoder()
-    # tde.fit(trees)
-
-
-
-    # # print(trees)
-    # print(type(trees))
-
-    # exit()
 
     results = trainer.eval(test_dataset=test_ds)
 

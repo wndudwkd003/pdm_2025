@@ -9,5 +9,9 @@ def get_mptms_tabnet_collator_class():
 
 COLLATOR_MAP = {
     (DatasetType.MPTMS, ModelType.TABNET): get_mptms_tabnet_collator_class,
-    (DatasetType.MPTMS, ModelType.XGBOOST): get_mptms_tabnet_collator_class,  # XGBoost도 TabNet과 동일한 Collator 사용
+    (DatasetType.MPTMS, ModelType.XGBOOST): get_mptms_tabnet_collator_class,
+    (DatasetType.MPTMS, ModelType.NODE): get_mptms_tabnet_collator_class,
+
+
+
 }

@@ -6,7 +6,10 @@ from typing import List, Any
 class BaseCollator(ABC):
     """모든 콜레이터의 기본 클래스"""
 
-    def __init__(self):
+    def __init__(self,
+        append_mask_indicator: bool = True
+    ):
+        self.append_mask_indicator = append_mask_indicator
         pass
 
     @abstractmethod

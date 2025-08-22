@@ -18,7 +18,9 @@ class MPTMSTabNetCollator(BaseCollator):
         csv_has_header: bool = True,
         seed: int | None = None,
     ):
-        super().__init__()
+        super().__init__(
+            append_mask_indicator=append_mask_indicator,
+        )
         self.dtype = dtype
         self.masking_ratio = float(masking_ratio)
         self.masking_mode = masking_mode

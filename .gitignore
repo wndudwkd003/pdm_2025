@@ -11,3 +11,8 @@ __pycache__/
 *.zip
 
 outputs/
+
+lightning_logs/
+saved_models/
+.pt_tmp/
+.vscode/

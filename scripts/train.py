@@ -9,6 +9,8 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 from src.utils.history_viz import save_history_artifacts
 from argparse import ArgumentParser
+from src.configs.config_manager import ConfigManager
+from src.utils.feature_name import expand_feature_names
 
 
 def prepare_split_dataset(data_dir: str, train_folder: str, seed: int, split_ratio: float):
@@ -30,10 +32,15 @@ def main(cfg: Config):
 
     train_ds = dataset_cls(jsonl_files=train_files)
     valid_ds = dataset_cls(jsonl_files=valid_files)
+
+    # 메타데이터 설정
+    metadata = train_ds.meta
     print(f"Train dataset size: {len(train_ds)}, Validation dataset size: {len(valid_ds)}")
 
+    model_config = ConfigManager.get_model_config(cfg.model_type) # instance of ModelConfig
+
     trainer = TrainerManager.get_trainer(
-        cfg.model_type,
+        model_type=cfg.model_type,
         work_dir=save_dir,
         data_collator=CollatorManager.get_collator(cfg.data_type, cfg.model_type)(
             masking_ratio=cfg.masking_ratio,
@@ -43,6 +50,9 @@ def main(cfg: Config):
             csv_has_header=cfg.csv_has_header,
             seed=cfg.seed,
         ),
+        # 모델 설정은 ConfigManager를 통해 가져옴
+        model_config=model_config,
+        metadata=metadata
     )
 
     history = trainer.fit(train_dataset=train_ds, valid_dataset=valid_ds)
