@@ -59,6 +59,8 @@ def main(cfg: Config):
 
     history = trainer.fit(train_dataset=train_ds, valid_dataset=valid_ds)
 
+    exit()
+
     save_history_artifacts(history, save_dir / "history")
 
     save_path = trainer.save(save_dir / "final")

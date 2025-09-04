@@ -15,7 +15,7 @@ class Config:
     test: str = "test"
     split_ratio: float = 0.2
 
-    model_type: ModelType = ModelType.NODE
+    model_type: ModelType = ModelType.MYMODEL
 
     save_dir: str = "outputs"
 
@@ -33,6 +33,8 @@ class Config:
 
     csv_has_header: bool = True
 
+    sincos_enabled: bool = True
+
 
     # === Test용 모델 로드 경로 ===
-    load_model: str = "outputs/2025-08-21_15-51-05_xgboost_mptms_mcar_0.2"
+    load_model: str = "outputs/2025-08-26_19-59-42_TabM_mptms_none_0.0"

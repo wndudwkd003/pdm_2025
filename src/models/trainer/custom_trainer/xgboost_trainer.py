@@ -39,11 +39,13 @@ class XGBTrainer(BaseTrainer):
         history: dict[str, Any] = {}
 
         for t in range(T):
+            m = self.model_config.eval_metric
+
             clf = XGBClassifier(
-                objective="multi:softprob",
+                objective=self.model_config.objective,
                 num_class=self.model_config.num_classes,
                 random_state=self.model_config.seed,
-                eval_metric=self.model_config.eval_metric,
+                eval_metric=m,
                 early_stopping_rounds= self.model_config.early_stopping_rounds,
             )
             clf.fit(
@@ -53,14 +55,20 @@ class XGBTrainer(BaseTrainer):
             self.models.append(clf)
 
             ev = clf.evals_result()
-            history[f"task{t}_train_mlogloss"] = ev["validation_0"]["mlogloss"]
-            history[f"task{t}_valid_mlogloss"]  = ev["validation_1"]["mlogloss"]
+
+            history[f"task{t}_train_{m}"] = ev["validation_0"][m]
+            history[f"task{t}_valid_{m}"]  = ev["validation_1"][m]
             history[f"task{t}_best_iteration"]  = int(clf.best_iteration)
 
         return history
 
-    def eval(self, test_dataset) -> dict[str, Any]:
+    def eval(self, test_dataset, tde) -> dict[str, Any]:
         X_te, y_te = self._dataset_to_numpy(test_dataset)
+        print(X_te.shape)
+        encoded_X = tde.transform(X_te)
+        print(encoded_X.shape)
+        print(encoded_X[0])
+        exit()
         preds: list[np.ndarray] = []
         for t in range(y_te.shape[1]):
             print("Input and Output shape: ", X_te.shape, y_te.shape)
@@ -71,11 +79,11 @@ class XGBTrainer(BaseTrainer):
 
     def save(self, save_path: Path):
         save_path.mkdir(parents=True, exist_ok=True)
-        meta = {"num_tasks": len(self.models), "num_classes": self.num_classes}
+        meta = {"num_tasks": len(self.models)}
         with open(save_path / "meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
         for t, m in enumerate(self.models):
-            m.save_model(str(save_path / f"save_model_task{t}.json"))
+            m.save_model(str(save_path / f"{self.model_config.save_model_name}{t}.{self.model_config.model_ext}"))
         return save_path
 
     def load(self, model_path: Path):
@@ -85,6 +93,6 @@ class XGBTrainer(BaseTrainer):
         self.models = []
         for t in range(num_tasks):
             clf = XGBClassifier()
-            clf.load_model(str(model_path / f"save_model_task{t}.json"))
+            clf.load_model(str(model_path / f"{self.model_config.save_model_name}{t}.{self.model_config.model_ext}"))
             self.models.append(clf)
         return self.models

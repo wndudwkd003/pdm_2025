@@ -14,6 +14,7 @@ from xgboost import XGBModel
 
 
 from src.models.core.tlf.tde import TreeDrivenEncoder
+from src.configs.config_manager import ConfigManager
 
 LOAD_MODEL = None
 
@@ -29,8 +30,13 @@ def main(cfg: Config):
     test_ds = dataset_cls(jsonl_files=test_files)
     print(f"Test dataset size: {len(test_ds)}")
 
+    # 메타데이터 설정
+    metadata = test_ds.meta
+    model_config = ConfigManager.get_model_config(cfg.model_type) # instance of ModelConfig
+
+
     trainer = TrainerManager.get_trainer(
-        cfg.model_type,
+        model_type=cfg.model_type,
         work_dir=LOAD_MODEL,
         data_collator=CollatorManager.get_collator(cfg.data_type, cfg.model_type)(
             masking_ratio=cfg.masking_ratio,
@@ -40,6 +46,9 @@ def main(cfg: Config):
             csv_has_header=cfg.csv_has_header,
             seed=cfg.seed,
         ),
+        # 모델 설정은 ConfigManager를 통해 가져옴
+        model_config=model_config,
+        metadata=metadata
     )
 
     trainer.load(LOAD_MODEL / "final")
@@ -51,12 +60,7 @@ def main(cfg: Config):
 
 
 
-    # # print(trees)
-    # print(type(trees))
-
-    # exit()
-
-    results = trainer.eval(test_dataset=test_ds)
+    results = trainer.eval(test_dataset=test_ds)# , tde=tde)
 
     save_eval_artifacts(results, LOAD_MODEL / "results")
 
