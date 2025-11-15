@@ -37,6 +37,7 @@ def main(cfg: Config):
 
     # 메타데이터 설정
     metadata = train_ds.meta
+
     print(f"Train dataset size: {len(train_ds)}, Validation dataset size: {len(valid_ds)}")
 
     model_config = ConfigManager.get_model_config(cfg.model_type) # instance of ModelConfig
@@ -59,8 +60,6 @@ def main(cfg: Config):
 
     history = trainer.fit(train_dataset=train_ds, valid_dataset=valid_ds)
 
-    exit()
-
     save_history_artifacts(history, save_dir / "history")
 
     save_path = trainer.save(save_dir / "final")
@@ -70,14 +69,5 @@ def main(cfg: Config):
 
 if __name__ == "__main__":
     cfg = Config()
-
-    parser = ArgumentParser(description="Training script for the model.")
-    parser.add_argument("--masking-ratio", type=float, default=cfg.masking_ratio)
-    args = parser.parse_args()
-
-    cfg.masking_ratio = args.masking_ratio
     set_seeds(cfg.seed)
-
-    print(f"Using masking ratio: {cfg.masking_ratio}")
-
     main(cfg)

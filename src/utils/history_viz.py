@@ -1,7 +1,7 @@
-# src/utils/history_viz.py
 from pathlib import Path
 import json
 import matplotlib.pyplot as plt
+
 
 def _plot_line(series: list[float], xlab: str, ylab: str, title: str, outpath: Path):
     plt.figure()
@@ -14,44 +14,100 @@ def _plot_line(series: list[float], xlab: str, ylab: str, title: str, outpath: P
     plt.savefig(outpath, dpi=150)
     plt.close()
 
+
+def _get_series(history: dict, key: str):
+    """
+    history[key]가 '비어 있지 않은 list'인 경우에만 반환하고,
+    아니면 None을 반환하는 공통 유틸 함수.
+    """
+    if key in history:
+        series = history[key]
+        if isinstance(series, list) and len(series) > 0:
+            return series
+    return None
+
+
 def save_history_graphs(history: dict, save_dir: Path):
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    if "loss" in history and isinstance(history["loss"], list) and len(history["loss"]) > 0:
-        _plot_line(history["loss"], "Epoch", "loss", "Train Loss", save_dir / "train_loss.png")
+    # -------------------------------------------------
+    # 1) loss: train_loss / valid_loss 한 그림에 같이
+    # -------------------------------------------------
+    train_loss = _get_series(history, "train_loss")
+    valid_loss = _get_series(history, "valid_loss")
 
-    if "lr" in history and isinstance(history["lr"], list) and len(history["lr"]) > 0:
-        _plot_line(history["lr"], "Epoch", "lr", "Learning Rate", save_dir / "lr.png")
+    if train_loss is not None and valid_loss is not None:
+        plt.figure()
+        plt.plot(train_loss, label="train_loss")
+        plt.plot(valid_loss, label="valid_loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("loss")
+        plt.title("loss")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(save_dir / "loss.png", dpi=150)
+        plt.close()
+    else:
+        # 혹시 옛날 형식(history["loss"])을 쓸 수도 있으니 남겨둠
+        loss_series = _get_series(history, "loss")
+        if loss_series is not None:
+            _plot_line(loss_series, "Epoch", "loss", "Train Loss", save_dir / "train_loss.png")
 
+    # -------------------------------------------------
+    # 2) Learning Rate 곡선 (옵션)
+    # -------------------------------------------------
+    lr_series = _get_series(history, "lr")
+    if lr_series is not None:
+        _plot_line(lr_series, "Epoch", "lr", "Learning Rate", save_dir / "lr.png")
+
+    # -------------------------------------------------
+    # 3) 그 외 train_* / valid_* 페어 공통 처리
+    #    예: train_acc / valid_acc → acc.png
+    # -------------------------------------------------
     keys = list(history.keys())
     train_metrics = [k for k in keys if k.startswith("train_")]
+
     for tk in train_metrics:
-        mk = tk[len("train_"):]
-        vk = f"valid_{mk}"
-        if vk in history and isinstance(history[tk], list) and isinstance(history[vk], list):
-            plt.figure()
-            plt.plot(history[tk], label=tk)
-            plt.plot(history[vk], label=vk)
-            plt.xlabel("Epoch")
-            plt.ylabel(mk)
-            plt.title(mk)
-            plt.legend()
-            plt.grid(True)
-            plt.tight_layout()
-            plt.savefig(save_dir / f"{mk}.png", dpi=150)
-            plt.close()
+        mk = tk[len("train_"):]  # 예: "train_acc" → "acc"
+
+        # 위에서 loss는 이미 처리했으니 여기선 건너뜀
+        if mk == "loss":
+            pass
         else:
-            if isinstance(history[tk], list) and len(history[tk]) > 0:
-                _plot_line(history[tk], "Epoch", tk, tk, save_dir / f"{tk}.png")
+            vk = f"valid_{mk}"
+            train_series = _get_series(history, tk)
+            valid_series = _get_series(history, vk)
+
+            if train_series is not None and valid_series is not None:
+                plt.figure()
+                plt.plot(train_series, label=tk)
+                plt.plot(valid_series, label=vk)
+                plt.xlabel("Epoch")
+                plt.ylabel(mk)
+                plt.title(mk)
+                plt.legend()
+                plt.grid(True)
+                plt.tight_layout()
+                plt.savefig(save_dir / f"{mk}.png", dpi=150)
+                plt.close()
+            else:
+                # valid_*가 없으면 train_*만 단독으로라도 그림
+                if train_series is not None:
+                    _plot_line(train_series, "Epoch", tk, tk, save_dir / f"{tk}.png")
+
 
 def save_history_artifacts(history: dict, save_dir: Path):
     """history.json 저장 + 그래프 생성"""
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
+
     with open(save_dir / "history.json", "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
+
     save_history_graphs(history, save_dir)
+
 
 def plot_history_from_model_dir(model_dir: Path):
     """{model_dir}/history/history.json을 읽어 그래프만 다시 생성"""

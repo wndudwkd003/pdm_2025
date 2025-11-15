@@ -71,6 +71,8 @@ class MPTMSTabNetCollator(BaseCollator):
 
         r = self.masking_ratio
 
+
+        # mcar 완전 랜덤 마스킹
         if self.masking_mode == "mcar":
             m = self.rng.random(D) >= r          # True=관측
             obs = m.astype(np.float32)

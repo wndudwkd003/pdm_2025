@@ -13,8 +13,8 @@ from pathlib import Path
 import csv
 
 # --- 전역 변수 설정 ---
-DATA_DIR = Path("/home/juyoung-lab/ws/dev_ws/pi3/datasets/MPTMS/data")
-SAVE_DIR = Path("/home/juyoung-lab/ws/dev_ws/pi3/datasets/MPTMS")
+DATA_DIR = Path("datasets/MPTMS/data")
+SAVE_DIR = Path("datasets/MPTMS")
 
 SAVE_DIR = SAVE_DIR / "processed_data"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)

@@ -12,8 +12,6 @@ from src.utils.history_viz import plot_history_from_model_dir
 from argparse import ArgumentParser
 from xgboost import XGBModel
 
-
-from src.models.core.tlf.tde import TreeDrivenEncoder
 from src.configs.config_manager import ConfigManager
 
 LOAD_MODEL = None
@@ -53,14 +51,8 @@ def main(cfg: Config):
 
     trainer.load(LOAD_MODEL / "final")
 
-    # model: XGBModel = trainer.models[0]
-    # trees = model.get_booster().get_dump(with_stats=False) # tree 내부 정보가 문자열로 반환됨
-    # tde = TreeDrivenEncoder()
-    # tde.fit(trees)
 
-
-
-    results = trainer.eval(test_dataset=test_ds)# , tde=tde)
+    results = trainer.eval(test_dataset=test_ds) # , tde=tde)
 
     save_eval_artifacts(results, LOAD_MODEL / "results")
 
@@ -72,14 +64,7 @@ def main(cfg: Config):
 if __name__ == "__main__":
     cfg = Config()
 
-    parser = ArgumentParser(description="Training script for the model.")
-    parser.add_argument("--masking-ratio", type=float, default=cfg.masking_ratio)
-    args = parser.parse_args()
-
-    cfg.masking_ratio = args.masking_ratio
     set_seeds(cfg.seed)
-
-    print(f"Using masking ratio: {cfg.masking_ratio}")
 
     LOAD_MODEL = Path(cfg.load_model)
 

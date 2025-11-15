@@ -15,15 +15,15 @@ class Config:
     test: str = "test"
     split_ratio: float = 0.2
 
-    model_type: ModelType = ModelType.MYMODEL
+    model_type: ModelType = ModelType.MYMODEL # MYMODEL
 
     save_dir: str = "outputs"
 
     # 마스킹 비율
-    masking_ratio: float = 0.0
+    masking_ratio: float = 0.2
 
     # "none" | "mcar" | "block_t" | "per_sensor"
-    masking_mode: str = "none"
+    masking_mode: str = "mcar"
 
     # True면 x 뒤에 마스크 인디케이터 붙임
     append_mask_indicator: bool = False
@@ -37,4 +37,4 @@ class Config:
 
 
     # === Test용 모델 로드 경로 ===
-    load_model: str = "outputs/2025-08-26_19-59-42_TabM_mptms_none_0.0"
+    load_model: str = "outputs/2025-11-14_13-25-06_mymodel_mptms_mcar_0.2"

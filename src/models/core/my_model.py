@@ -1,7 +1,7 @@
 
 import torch
 import torch.nn as nn
-from typing import Sequence as sequ
+from typing import Sequence
 from src.models.core.utils.groups import create_group_matrix
 
 
@@ -12,6 +12,7 @@ warnings.filterwarnings("ignore", message="xFormers is available")
 from src.models.core.module.sequences import (
     PositionalEmbedding,
     SequencePoolMean,
+    TemporalWeightedMeanPool
 )
 from src.models.core.module.image_encoder import DINOv2EncoderHub
 from src.models.core.module.fusions import FusionConcat
@@ -23,20 +24,21 @@ from src.models.core.module.category import EmbeddingGenerator
 from src.models.core.encoder.mpie import MPIEncoder
 from src.models.core.encoder.mpde import (
     MPDEncoder,
-    MPDDecoder
+    # MPDDecoder
 )
-
+from src.models.core.module.dmattention import TransformerEncoderWithAttn
+from deeptlf import DeepTFL, TreeDrivenEncoder
 
 
 class MyModel(nn.Module):
     def __init__(
         self,
         input_dim: int = 8,
-        output_dim: sequ[int] = (4,),
-        n_d: int = 64,
-        n_a: int = 64,
-        n_shared: int = 2,
-        n_independent: int = 2,
+        output_dim: Sequence[int] = (4,),
+        n_d: int = 256,
+        n_a: int = 256,
+        n_shared: int = 8,
+        n_independent: int = 8,
         n_steps: int = 3,
         virtual_batch_size: int = 128,
         momentum: float = 0.02,
@@ -44,10 +46,10 @@ class MyModel(nn.Module):
         mask_type: str = "sparsemax",
         bias: bool = True,
         epsilon: float = 1e-6,
-        gamma: float = 1.0,
+        gamma: float = 1.3,
         cat_idxs: list = [],
         cat_dims: list = [],
-        cat_emb_dim: int|list = 1,
+        cat_emb_dim: list = [], # 1 이상의 정수값이 원소로 들어가야 함
         d_model: int = 256,
         nhead: int = 8,
         ff_dim: int = 512,
@@ -56,9 +58,10 @@ class MyModel(nn.Module):
         max_seq_len: int = 256,
         image_encoder_model: str = "dinov2_vits14",
         image_input_size: int = 224,
-        multimodal_setting: bool = False
+        multimodal_setting: bool = False,
     ):
         super().__init__()
+
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.n_d = n_d
@@ -76,23 +79,22 @@ class MyModel(nn.Module):
         self.cat_idxs = cat_idxs
         self.cat_dims = cat_dims
         self.cat_emb_dim = cat_emb_dim
-        self.d_model = 64+384
+        # self.d_model = d_model
         self.image_encoder_model = image_encoder_model
         self.image_input_size = image_input_size
+
         # grouped_features가 빈 리스트인경우 단위행렬(항등행렬)
         self.group_matrix = create_group_matrix(self.grouped_features, self.input_dim)
-        print(self.group_matrix.shape)
-        print(self.group_matrix)
-        # 범주형 변수 임베딩 클래스
+
+        # 범주형 변수 임베딩 클래스``
         self.embedder = EmbeddingGenerator(
             input_dim=self.input_dim,
             cat_idxs=self.cat_idxs,
             cat_dims=self.cat_dims,
             cat_emb_dims=self.cat_emb_dim,
-            group_matrix=self.group_matrix
+            group_matrix=self.group_matrix,
         )
         self.post_embed_dim = self.embedder.post_embed_dim
-
 
         # Missing Pattern Independent Encoder (MPIE)
         self.mpie = MPIEncoder(
@@ -112,79 +114,66 @@ class MyModel(nn.Module):
         )
 
         # Missing Pattern Dependent Encoder (MPDE)
-        self.mpde = MPDEncoder(
-            input_dim=self.post_embed_dim,
-            n_d=self.n_d,
-            n_a=self.n_a,
-            n_shared=self.n_shared,
-            n_independent=self.n_independent,
-            n_steps=self.n_steps,
-            virtual_batch_size=self.virtual_batch_size,
-            momentum=self.momentum,
-            group_attention_matrix=self.embedder.embedding_group_matrix,
-            mask_type=self.mask_type,
-            bias=self.bias,
-            epsilon=self.epsilon,
-            gamma=self.gamma
-        )
+        # self.mpde = MPDEncoder(
+        #     input_dim=self.post_embed_dim,
+        #     n_d=self.n_d,
+        #     n_a=self.n_a,
+        #     n_shared=self.n_shared,
+        #     n_independent=self.n_independent,
+        #     n_steps=self.n_steps,
+        #     virtual_batch_size=self.virtual_batch_size,
+        #     momentum=self.momentum,
+        #     group_attention_matrix=self.embedder.embedding_group_matrix,
+        #     mask_type=self.mask_type,
+        #     bias=self.bias,
+        #     epsilon=self.epsilon,
+        #     gamma=self.gamma
+        # )
 
         # Missing Pattern Dependent Decoder (MPDD)
-        self.mpdd = MPDDecoder(
-            input_dim=self.post_embed_dim,
-            n_d=self.n_d,
-            n_a=self.n_a,
-            n_shared=self.n_shared,
-            n_independent=self.n_independent,
-            n_steps=self.n_steps,
-            virtual_batch_size=self.virtual_batch_size,
-            momentum=self.momentum,
-            group_attention_matrix=self.embedder.embedding_group_matrix,
-            mask_type=self.mask_type,
-            bias=self.bias,
-            epsilon=self.epsilon,
-            gamma=self.gamma
-        )
+        # self.mpdd = MPDDecoder(
+        #     input_dim=self.post_embed_dim,
+        #     n_d=self.n_d,
+        #     n_a=self.n_a,
+        #     n_shared=self.n_shared,
+        #     n_independent=self.n_independent,
+        #     n_steps=self.n_steps,
+        #     virtual_batch_size=self.virtual_batch_size,
+        #     momentum=self.momentum,
+        #     group_attention_matrix=self.embedder.embedding_group_matrix,
+        #     mask_type=self.mask_type,
+        #     bias=self.bias,
+        #     epsilon=self.epsilon,
+        #     gamma=self.gamma
+        # )
 
-        # TabNet
-        self.tabular_encoder = TabNetEncoder(
-            input_dim=self.post_embed_dim,
-            n_d=self.n_d,
-            n_a=self.n_a,
-            n_shared=self.n_shared,
-            n_independent=self.n_independent,
-            n_steps=self.n_steps,
-            virtual_batch_size=self.virtual_batch_size,
-            momentum=self.momentum,
-            group_attention_matrix=self.embedder.embedding_group_matrix,
-            mask_type=self.mask_type,
-            bias=self.bias,
-            epsilon=self.epsilon,
-            gamma=self.gamma
-        )
+
         # 이미지 인코더
         if multimodal_setting:
             self.image_encoder = DINOv2EncoderHub(model_name=self.image_encoder_model)
 
 
-
-
         # 단순 컨캣 융합
-        self.fusion = FusionConcat(d_model=self.d_model)
+        # self.fusion = FusionConcat(d_model=self.d_model)
+
+        self.tab_proj = nn.Linear(self.n_d, self.n_d)
+        self.activate = nn.LeakyReLU()
+
         # 포지셔널 임베딩 + Transformer 인코더
-        self.pos_emb = PositionalEmbedding(max_seq_len=max_seq_len, d_model=self.d_model)
-        enc_layer = nn.TransformerEncoderLayer(
-            d_model=self.d_model,
+        self.pos_emb = PositionalEmbedding(max_seq_len=max_seq_len, d_model=self.n_d)
+
+        self.transformer = TransformerEncoderWithAttn(
+            num_layers=num_layers,
+            d_model=self.n_d,
             nhead=nhead,
             dim_feedforward=ff_dim,
             dropout=dropout,
-            batch_first=True,
-            activation="gelu",
             norm_first=True,
         )
-        self.transformer = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
+
         # 시퀀스 풀링 + 멀티태스크 분류 헤드
-        self.seq_pool = SequencePoolMean()
-        self.classifier = Classifier(input_dim=self.d_model, output_dim=self.output_dim)
+        self.pool = TemporalWeightedMeanPool(init_alpha=1.0)
+        self.classifier = Classifier(input_dim=self.n_d, output_dim=self.output_dim)
 
 
     def time_series_serialization(
@@ -212,83 +201,74 @@ class MyModel(nn.Module):
         return x_grouped
 
 
+    """
+    결측 값을 0으로 변환
+    todo: 나중에 평균 또는 다른 방법으로 전환하는 세팅을 추가하면 어떨지
+    """
+    def _convert_zero_nan(self, x: torch.Tensor, x_bemv: torch.Tensor):
+        missing_mask = (x_bemv == 0)
+        x = x.clone()
+        x[missing_mask] = 0.0
+        return x
+
+
     def forward(
         self,
-        x: torch.Tensor,      # (B, S, F)
-        x_bemv: torch.Tensor,  # (B, S, F) => Binary Encoding of Missing Values
-        x_img: torch.Tensor,  # (B, S, C, H, W)
+
+        # Tabular 입력 (B, S, F)
+        x: torch.Tensor,
+
+        # Binary Encoding of Missing Values (B, S, F)
+        x_bemv: torch.Tensor,
+
+        # todo: 멀티모달 세팅을 위해 이미지 입력을 추가할 수 있으나 나중에 고려 (B, S, C, H, W)
+        x_img: torch.Tensor = None,
     ):
         # tabular
         B, S, F = x.shape
+
+        x = self._convert_zero_nan(x, x_bemv)
 
         # tabular + time series serialization
         x_flat = self.time_series_serialization(x)
         x_bemv_flat = self.time_series_serialization(x_bemv)
 
+
         # 범주형 변수 포함 변환
         x_flat = self.embedder(x_flat)
 
+        # MPDEncoder
+        # step_outputs_mpde, M_loss_mpde, attention_maps_mpde = self.mpde(x_flat, x_bemv_flat)
+
+
         # tabular Missing Pattern Independence Encoder (MPIE)
-        step_outputs, M_loss = self.mpie(x_flat, x_bemv_flat)
-        tab_tok = torch.sum(torch.stack(step_outputs, dim=0), dim=0)
-        tab_tok = self.time_series_grouping(tab_tok, x.shape)
+        step_outputs, M_loss, attention_maps = self.mpie(x_flat, x_bemv_flat)
 
-        print("tab_tok before view", tab_tok.shape)
-        exit()
+        # 여러 step을 합쳐서 최종 토큰 (TabNet-style)
+        tab_tok = torch.sum(torch.stack(step_outputs, dim=0), dim=0)  # (B*S, n_d)
 
+        # (B*S, n_d) → (B, S, n_d)
+        tab_tok = self.time_series_grouping(tab_tok, x.shape)  # (B, S, n_d)
 
+        # print("tab_tok.shape:", tab_tok.shape)
 
-
-        # image
-        B2, S2, C, H, W = x_img.shape
-        x_img_flat = x_img.view(B2 * S2, C, H, W)          # (B*S, C, H, W)
-        img_feat = self.image_encoder(x_img_flat)          # (B*S, C, H, W) 그대로
-        img_tok = img_feat.view(B2, S2, -1)                # (B, S, n_img = C*H*W)
-        print("img_tok 차원", img_tok.shape)
-
-        # ----- 융합(컨캣→프로젝션) -----
-        z = self.fusion(tab_tok, img_tok)                  # (B, S, d_model)
-        print("융합 후 z 차원", z.shape)
-
-        # ----- 포지셔널 임베딩 + Transformer -----
-        z = self.pos_emb(z)                                # (B, S, d_model)
-        z = self.transformer(z)                            # (B, S, d_model)
-
-        # ----- 시퀀스 풀링 + 멀티태스크 분류 -----
-        h = self.seq_pool(z)                               # (B, d_model)
-        outs = self.classifier(h)                          # List[(B, Ck)]
-
-        print("outs.shape", [o.shape for o in outs])
-        print("M_loss.shape", M_loss.shape if isinstance(M_loss, torch.Tensor) else M_loss)
-        print("z.shape", z.shape)
-        exit()
-
-        # outs: 멀티태스크 로짓 리스트, M_loss: TabNet sparsity 정규화 항,
-        # z: Transformer의 토큰 임베딩 (필요 시 사용)
-        return outs, M_loss, z
+        # (B, S, n_d) → (B, S, n_d)
+        z = self.tab_proj(tab_tok)
+        z = self.activate(z)
 
 
+        # 포지셔널 임베딩 + Transformer 인코더
+        z = self.pos_emb(z)        # (B, S, n_d)
+        z, tr_attn_maps = self.transformer(z)  # z: (B, S, n_d), tr_attn_maps: list[L] of (B, H, S, S)
 
 
+        # 시퀀스 풀링 + 멀티태스크 classifier
+        h = self.pool(z)       # (B, n_d)
+        outs = self.classifier(h)  # List[(B, Ck)]
+
+        # 학습에서 쓸 수 있도록 그대로 반환
+        return outs, M_loss, z, attention_maps, tr_attn_maps
 
 
-if __name__ == "__main__":
-    B = 8
-    S = 30
-    F = 8
-    IMG_C = 3
-    IMG_H = 112
-    IMG_W = 112
-
-    model = MyModel(
-        input_dim=8,
-        output_dim=[4, 4],
-        image_input_size=IMG_H,
-    )
-
-    model.to("cuda")
-    tabular_dummy = torch.rand((B, S, F), dtype=torch.float32).to("cuda")
-    image_dummy = torch.rand((B, S, IMG_C, IMG_H, IMG_W), dtype=torch.float32).to("cuda")
-    out = model.forward(tabular_dummy, tabular_dummy, image_dummy)
 
 

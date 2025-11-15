@@ -3,7 +3,14 @@ from pathlib import Path
 from typing import Any
 import numpy as np
 import pandas as pd
-
+import torch
+import torch.serialization
+from omegaconf import DictConfig
+from omegaconf.base import ContainerMetadata
+torch.serialization.add_safe_globals([
+    DictConfig,
+    ContainerMetadata,
+])
 from pytorch_tabular import TabularModel
 # ▼ 변경: NodeConfig → TabNetModelConfig
 from pytorch_tabular.models import TabNetModelConfig
@@ -99,12 +106,12 @@ class TabNet2Trainer(BaseTrainer):
 
         model_cfg = TabNetModelConfig(
             task="classification",
-            metrics=["accuracy"], # ["f1_score", "accuracy", "auroc"],
-            metrics_prob_input=[False, False, True],   # f1/acc는 라벨, auroc은 proba
+            metrics=["f1_score", "accuracy", "auroc"],
+            metrics_prob_input=[False, False, True],
             metrics_params=[
-                # {"average": "macro", "num_classes": self.model_config.num_classes},  # f1_score
-                {},                                                                  # accuracy
-                # {"average": "macro", "num_classes": self.model_config.num_classes},  # auroc
+                {"average": "macro", "num_classes": self.model_config.num_classes},
+                {},
+                {"average": "macro", "num_classes": self.model_config.num_classes},
             ],
             learning_rate=self.model_config.learning_rate,
             head="LinearHead",  # Linear Head
@@ -133,7 +140,9 @@ class TabNet2Trainer(BaseTrainer):
             auto_lr_find=False,
             checkpoints_path=str(self.work_dir / "checkpoints"),
             trainer_kwargs={
-                "default_root_dir": str(self.work_dir)
+                "default_root_dir": str(self.work_dir),
+
+                "enable_progress_bar": False,   # ← 추가
             },
         )
 

@@ -62,13 +62,9 @@ class XGBTrainer(BaseTrainer):
 
         return history
 
-    def eval(self, test_dataset, tde) -> dict[str, Any]:
+    def eval(self, test_dataset) -> dict[str, Any]:
         X_te, y_te = self._dataset_to_numpy(test_dataset)
-        print(X_te.shape)
-        encoded_X = tde.transform(X_te)
-        print(encoded_X.shape)
-        print(encoded_X[0])
-        exit()
+
         preds: list[np.ndarray] = []
         for t in range(y_te.shape[1]):
             print("Input and Output shape: ", X_te.shape, y_te.shape)

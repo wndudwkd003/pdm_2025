@@ -13,6 +13,10 @@ from src.models.core.module.dmattention import (
 # Missing Pattern Independent Encoder (MPIE)
 
 class MPIEncoder(nn.Module):
+
+    group_attention_matrix: torch.Tensor
+
+
     def __init__(
         self,
         input_dim: int,
@@ -31,6 +35,12 @@ class MPIEncoder(nn.Module):
 
     ):
         super().__init__()
+
+        self.register_buffer(
+            "group_attention_matrix",
+            group_attention_matrix.to(torch.float32)
+        )
+
         self.input_dim = input_dim
         self.n_d = n_d
         self.n_a = n_a
@@ -39,7 +49,6 @@ class MPIEncoder(nn.Module):
         self.n_steps = n_steps
         self.virtual_batch_size = virtual_batch_size
         self.momentum = momentum
-        self.register_buffer("group_attention_matrix", group_attention_matrix.to(torch.float32))
         self.attention_dim = self.group_attention_matrix.shape[0]
         self.bias = bias
         self.feat_output_dim = self.n_d + self.n_a
@@ -102,7 +111,7 @@ class MPIEncoder(nn.Module):
             self.att_transformers.append(attention)
             self.msa_transformers.append(msa)
 
-        self.activate = nn.ReLU()
+        self.activate = nn.LeakyReLU() # nn.ReLU()
 
     def forward(
         self,
@@ -116,34 +125,37 @@ class MPIEncoder(nn.Module):
         # init outputs
         M_loss = 0.0
         step_outputs = []
+        attention_maps = []
 
         # init batch norm
         x = self.initial_bn(x)
+        # print("after bn x:", x[0, :8])
+
         feat_out = self.initial_splitter(x)
         att = feat_out[:, self.n_d:]
 
+        # print("x.shape:", x.shape)
+
         for step in range(self.n_steps):
             # attentive transformer
-            Mask = self.att_transformers[step](prior, att)
+            tab_mask = self.att_transformers[step](prior, att)
 
-            M_loss += torch.mean(
-                torch.sum(Mask * torch.log(Mask + self.epsilon), dim=1)
-            )
+            # print("tab_mask:", tab_mask[0, :8])
+            # print("tab_mask.shape", tab_mask.shape)
 
-            # apply bemv
-            Mask = Mask * bemv
+            M_loss += torch.mean(torch.sum(tab_mask * torch.log(tab_mask + self.epsilon), dim=1))
 
             # update prior
-            prior = prior * (self.gamma - Mask)
+            prior = prior * (self.gamma - tab_mask)
 
             # masked feature
-            M_feature_level = Mask @ self.group_attention_matrix
+            M_feature_level = tab_mask @ self.group_attention_matrix
             x_masked = M_feature_level * x
 
-            # masked self-attention
-            print(x_masked.shape, bemv.shape, self.group_attention_matrix.shape, (bemv @ self.group_attention_matrix).shape)
+            # print("x_masked:", x_masked[0, :8])
 
-            x_masked, A = self.msa_transformers[step](x_masked, bemv @ self.group_attention_matrix)
+            x_masked, A = self.msa_transformers[step](x_masked, bemv)
+            attention_maps.append(A)
 
             # feature transformer
             feat_out = self.feat_transformers[step](x_masked)
@@ -157,7 +169,7 @@ class MPIEncoder(nn.Module):
 
         M_loss /= self.n_steps
 
-        return step_outputs, M_loss
+        return step_outputs, M_loss, attention_maps
 
 
 
