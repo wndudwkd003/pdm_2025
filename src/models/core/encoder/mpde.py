@@ -6,25 +6,10 @@ from src.models.core.module.tabular_encoder import (
     AttentiveTransformer
 )
 from src.models.core.module.dmattention import (
-    MaskedSelfAttention
+    SelfAttention1D
 )
 from src.models.core.module.layer_module import GLU_Block
 from src.models.core.utils.weights import initialize_non_glu
-
-
-class SelfAttention1D(nn.Module):
-    """
-    특징 축(F)에 대한 간단한 self-attention.
-    입력  x: (B, F)  →  출력 y: (B, F), attn: (B, F, F)
-    """
-    def __init__(self, d_model: int = 1, n_heads: int = 1):
-        super().__init__()
-        self.mha = nn.MultiheadAttention(embed_dim=d_model, num_heads=n_heads, batch_first=True)
-
-    def forward(self, x: torch.Tensor):
-        q = k = v = x.unsqueeze(-1)        # (B, F, 1)
-        y, attn = self.mha(q, k, v, need_weights=True)
-        return y.squeeze(-1), attn         # (B, F), (B, F, F)
 
 
 # -----------------------------
@@ -135,7 +120,7 @@ class MPDEncoder(nn.Module):
 
         self.shared_feat_transform = nn.ModuleList([
             nn.Linear(
-                in_features=self.input_dim if i == 0 else self.feat_output_dim,
+                in_features=self.input_dim_mpde if i == 0 else self.feat_output_dim,
                 out_features=2 * (self.feat_output_dim),
                 bias=self.bias
             )
@@ -157,31 +142,34 @@ class MPDEncoder(nn.Module):
         self.sa_transformers = nn.ModuleList()
 
         for _ in range(self.n_steps):
-            feat_transformer = FeatTransformer(
-                input_dim=self.input_dim_mpde,
-                output_dim=self.feat_output_dim,
-                shared_layers=self.shared_feat_transform,
-                n_glu_independent=self.n_independent,
-                virtual_batch_size=self.virtual_batch_size,
-                momentum=self.momentum,
+
+            self.feat_transformers.append(
+                FeatTransformer(
+                    input_dim=self.input_dim_mpde,
+                    output_dim=self.feat_output_dim,
+                    shared_layers=self.shared_feat_transform,
+                    n_glu_independent=self.n_independent,
+                    virtual_batch_size=self.virtual_batch_size,
+                    momentum=self.momentum,
+                )
             )
 
-            attention = AttentiveTransformer(
-                input_dim=self.n_a,
-                group_dim=self.attention_dim,
-                virtual_batch_size=self.virtual_batch_size,
-                momentum=self.momentum,
-                mask_type=self.mask_type,
+            self.att_transformers.append(
+                AttentiveTransformer(
+                    input_dim=self.n_a,
+                    group_dim=self.attention_dim,
+                    virtual_batch_size=self.virtual_batch_size,
+                    momentum=self.momentum,
+                    mask_type=self.mask_type,
+                )
             )
 
-            sa = SelfAttention1D(
-                d_model=1,
-                n_heads=1
+            self.sa_transformers.append(
+                SelfAttention1D(
+                    d_model=1,
+                    n_heads=1
+                )
             )
-
-            self.feat_transformers.append(feat_transformer)
-            self.att_transformers.append(attention)
-            self.sa_transformers.append(sa)
 
         self.activate = nn.LeakyReLU() # nn.ReLU()
 
@@ -191,61 +179,117 @@ class MPDEncoder(nn.Module):
         bemv: torch.Tensor,     # binary encoding of missing values
 
     ):
-        # init prior
-        prior = torch.ones((x.shape[0], self.attention_dim), device=x.device)
+        B, F = x.shape
 
-        # init outputs
+        # init prior (TabNet-style)
+        prior = torch.ones((B, self.attention_dim), device=x.device)
+
         M_loss = 0.0
-        step_outputs = []
-        attention_maps = []
+        step_outputs: list[torch.Tensor] = []
+        attention_maps: list[torch.Tensor] = []
 
-        # init batch norm
-        x = self.initial_bn(x)
+        # x 에만 BN
+        x = self.initial_bn(x)                    # (B, F)
 
-        x_cat = torch.cat([x, bemv], dim=1) # 결측 의존 특징 추가
+        # bemv 와 concat
+        x_cat = torch.cat([x, bemv], dim=1)       # (B, 2F)
 
-        feat_out = self.initial_splitter(x_cat)
-        att = feat_out[:, self.n_d:]
 
+
+        feat_out = self.initial_splitter(x_cat)   # (B, n_d + n_a)
+
+
+        att = feat_out[:, self.n_d:]              # (B, n_a)
 
         for step in range(self.n_steps):
-            # attentive transformer
-            tab_mask = self.att_transformers[step](prior, att)
+            # feature selection mask
+            tab_mask = self.att_transformers[step](prior, att)   # (B, G)
 
-            # print("tab_mask:", tab_mask[0, :8])
-            # print("tab_mask.shape", tab_mask.shape)
+            # sparsity loss
+            M_loss += torch.mean(
+                torch.sum(tab_mask * torch.log(tab_mask + self.epsilon), dim=1)
+            )
 
-            M_loss += torch.mean(torch.sum(tab_mask * torch.log(tab_mask + self.epsilon), dim=1))
-
-            # update prior
+            # prior 업데이트
             prior = prior * (self.gamma - tab_mask)
 
-            # masked feature
-            M_feature_level = tab_mask @ self.group_attention_matrix
-            x_masked = M_feature_level * x
+            # group-level mask → feature-level mask
+            M_feature_level = tab_mask @ self.group_attention_matrix   # (B, F)
+            x_masked = M_feature_level * x                             # (B, F)
 
-            # print("x_masked:", x_masked[0, :8])
-
-            x_masked, A = self.sa_transformers[step](x_masked, bemv)
+            # Self-Attention (missing 의존 정보는 x_masked, bemv concat 에 이미 반영)
+            x_attn, A = self.sa_transformers[step](x_masked)           # (B, F), (B, F, F)
             attention_maps.append(A)
 
-            # feature transformer
-            x_masked_cat = torch.cat([x_masked, bemv], dim=1)
-            feat_out = self.feat_transformers[step](x_masked_cat)
+            # 다시 bemv 붙여서 feature transformer 통과
+            x_attn_cat = torch.cat([x_attn, bemv], dim=1)              # (B, 2F)
+            feat_out = self.feat_transformers[step](x_attn_cat)        # (B, n_d + n_a)
 
-            feature_part = feat_out[:, :self.n_d]
+            feature_part = feat_out[:, :self.n_d]                      # (B, n_d)
             activated = self.activate(feature_part)
             step_outputs.append(activated)
 
-            # update attention
+            # 다음 step용 attention 입력
             att = feat_out[:, self.n_d:]
 
         M_loss /= self.n_steps
+
+
 
         return step_outputs, M_loss, attention_maps
 
 
 
+class MPDDecoder(nn.Module):
+    """
+    Missing-Pattern Dependent Decoder (MPDD)
 
+    - 입력:  h_agg (B, n_d)      # MPDEncoder 가 내주는 aggregated hidden
+    - 출력:  x_rec (B, input_dim)  # MPDEncoder 의 입력 차원 (post_embed_dim) 으로 복원
+    """
+    def __init__(
+        self,
+        input_dim: int,          # 복원할 차원 (예: post_embed_dim)
+        n_d: int,
+        n_layers: int,
+        virtual_batch_size: int,
+        momentum: float,
+    ):
+        super().__init__()
 
+        self.input_dim = input_dim
+        self.n_d = n_d
+        self.n_layers = n_layers
+        self.virtual_batch_size = virtual_batch_size
+        self.momentum = momentum
 
+        self.glu_blocks = nn.ModuleList()
+        self.fcs = nn.ModuleList()
+
+        for _ in range(n_layers):
+            self.glu_blocks.append(
+                GLU_Block(
+                    input_dim=self.n_d,
+                    output_dim=self.n_d,
+                    virtual_batch_size=self.virtual_batch_size,
+                    momentum=self.momentum,
+                )
+            )
+            fc = nn.Linear(self.n_d, self.n_d, bias=True)
+            initialize_non_glu(fc, self.n_d, self.n_d)
+            self.fcs.append(fc)
+
+        self.activate = nn.ReLU()
+        self.to_output = nn.Linear(self.n_d, self.input_dim)
+
+    def forward(self, h_agg: torch.Tensor):
+        # h_agg: (B, n_d)
+        z = h_agg
+        for glu, fc in zip(self.glu_blocks, self.fcs):
+            z = glu(z)      # (B, n_d)
+            z = fc(z)       # (B, n_d)
+
+        z = self.activate(z)
+        x_rec = self.to_output(z)     # (B, input_dim)
+
+        return x_rec

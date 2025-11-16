@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn as nn
 from typing import Sequence
@@ -24,7 +23,7 @@ from src.models.core.module.category import EmbeddingGenerator
 from src.models.core.encoder.mpie import MPIEncoder
 from src.models.core.encoder.mpde import (
     MPDEncoder,
-    # MPDDecoder
+    MPDDecoder,
 )
 from src.models.core.module.dmattention import TransformerEncoderWithAttn
 from deeptlf import DeepTFL, TreeDrivenEncoder
@@ -49,7 +48,7 @@ class MyModel(nn.Module):
         gamma: float = 1.3,
         cat_idxs: list = [],
         cat_dims: list = [],
-        cat_emb_dim: list = [], # 1 이상의 정수값이 원소로 들어가야 함
+        cat_emb_dim: list = [],
         d_model: int = 256,
         nhead: int = 8,
         ff_dim: int = 512,
@@ -59,6 +58,7 @@ class MyModel(nn.Module):
         image_encoder_model: str = "dinov2_vits14",
         image_input_size: int = 224,
         multimodal_setting: bool = False,
+        image_feat_dim: int = 384,
     ):
         super().__init__()
 
@@ -79,14 +79,13 @@ class MyModel(nn.Module):
         self.cat_idxs = cat_idxs
         self.cat_dims = cat_dims
         self.cat_emb_dim = cat_emb_dim
-        # self.d_model = d_model
         self.image_encoder_model = image_encoder_model
         self.image_input_size = image_input_size
+        self.multimodal_setting = multimodal_setting
+        self.image_feat_dim = image_feat_dim
 
-        # grouped_features가 빈 리스트인경우 단위행렬(항등행렬)
         self.group_matrix = create_group_matrix(self.grouped_features, self.input_dim)
 
-        # 범주형 변수 임베딩 클래스``
         self.embedder = EmbeddingGenerator(
             input_dim=self.input_dim,
             cat_idxs=self.cat_idxs,
@@ -96,7 +95,6 @@ class MyModel(nn.Module):
         )
         self.post_embed_dim = self.embedder.post_embed_dim
 
-        # Missing Pattern Independent Encoder (MPIE)
         self.mpie = MPIEncoder(
             input_dim=self.post_embed_dim,
             n_d=self.n_d,
@@ -113,56 +111,43 @@ class MyModel(nn.Module):
             gamma=self.gamma
         )
 
-        # Missing Pattern Dependent Encoder (MPDE)
-        # self.mpde = MPDEncoder(
-        #     input_dim=self.post_embed_dim,
-        #     n_d=self.n_d,
-        #     n_a=self.n_a,
-        #     n_shared=self.n_shared,
-        #     n_independent=self.n_independent,
-        #     n_steps=self.n_steps,
-        #     virtual_batch_size=self.virtual_batch_size,
-        #     momentum=self.momentum,
-        #     group_attention_matrix=self.embedder.embedding_group_matrix,
-        #     mask_type=self.mask_type,
-        #     bias=self.bias,
-        #     epsilon=self.epsilon,
-        #     gamma=self.gamma
-        # )
+        self.mpde = MPDEncoder(
+            input_dim=self.post_embed_dim,
+            n_d=self.n_d,
+            n_a=self.n_a,
+            n_shared=self.n_shared,
+            n_independent=self.n_independent,
+            n_steps=self.n_steps,
+            virtual_batch_size=self.virtual_batch_size,
+            momentum=self.momentum,
+            group_attention_matrix=self.embedder.embedding_group_matrix,
+            mask_type=self.mask_type,
+            bias=self.bias,
+            epsilon=self.epsilon,
+            gamma=self.gamma
+        )
 
-        # Missing Pattern Dependent Decoder (MPDD)
-        # self.mpdd = MPDDecoder(
-        #     input_dim=self.post_embed_dim,
-        #     n_d=self.n_d,
-        #     n_a=self.n_a,
-        #     n_shared=self.n_shared,
-        #     n_independent=self.n_independent,
-        #     n_steps=self.n_steps,
-        #     virtual_batch_size=self.virtual_batch_size,
-        #     momentum=self.momentum,
-        #     group_attention_matrix=self.embedder.embedding_group_matrix,
-        #     mask_type=self.mask_type,
-        #     bias=self.bias,
-        #     epsilon=self.epsilon,
-        #     gamma=self.gamma
-        # )
-
-
-        # 이미지 인코더
-        if multimodal_setting:
+        if self.multimodal_setting:
             self.image_encoder = DINOv2EncoderHub(model_name=self.image_encoder_model)
+            self.image_proj = nn.Linear(self.image_feat_dim, self.n_d)
 
+        self.fuse_mpie_mpde = nn.Linear(2 * self.n_d, self.n_d)
 
-        # 단순 컨캣 융합
-        # self.fusion = FusionConcat(d_model=self.d_model)
-
-        self.tab_proj = nn.Linear(self.n_d, self.n_d)
+        self.mpie_proj = nn.Linear(self.n_d, self.n_d)
+        self.mpde_proj = nn.Linear(self.n_d, self.n_d)
         self.activate = nn.LeakyReLU()
 
-        # 포지셔널 임베딩 + Transformer 인코더
         self.pos_emb = PositionalEmbedding(max_seq_len=max_seq_len, d_model=self.n_d)
 
-        self.transformer = TransformerEncoderWithAttn(
+        self.mpie_transformer = TransformerEncoderWithAttn(
+            num_layers=num_layers,
+            d_model=self.n_d,
+            nhead=nhead,
+            dim_feedforward=ff_dim,
+            dropout=dropout,
+            norm_first=True,
+        )
+        self.mpde_transformer = TransformerEncoderWithAttn(
             num_layers=num_layers,
             d_model=self.n_d,
             nhead=nhead,
@@ -171,10 +156,20 @@ class MyModel(nn.Module):
             norm_first=True,
         )
 
-        # 시퀀스 풀링 + 멀티태스크 분류 헤드
-        self.pool = TemporalWeightedMeanPool(init_alpha=1.0)
-        self.classifier = Classifier(input_dim=self.n_d, output_dim=self.output_dim)
+        self.pool_mpie = TemporalWeightedMeanPool(init_alpha=1.0)
+        self.pool_mpde = TemporalWeightedMeanPool(init_alpha=1.0)
 
+        self.branch_attn = nn.MultiheadAttention(
+            embed_dim=self.n_d,
+            num_heads=nhead,
+            batch_first=True,
+        )
+
+        self.num_branches = 2 + (1 if self.multimodal_setting else 0)
+
+        self.before_classifier = nn.Linear(self.n_d * self.num_branches, self.n_d)
+        self.before_classifier_2 = nn.Linear(self.n_d, self.n_d)
+        self.classifier = Classifier(input_dim=self.n_d, output_dim=self.output_dim)
 
     def time_series_serialization(
         self,
@@ -183,23 +178,24 @@ class MyModel(nn.Module):
         shape = x.shape
         L = len(shape)
 
-        if L == 3: # (B, S, F)
+        if L == 3:
             B, S, F = shape
             x_flat = x.view(B * S, F)
+            return x_flat
 
-        return x_flat
+        return x
 
     def time_series_grouping(
         self,
         x: torch.Tensor,
         shape: torch.Tensor,
     ):
-        if len(shape) == 3: # (B, S, F)
+        if len(shape) == 3:
             B, S, F = shape
             x_grouped = x.view(B, S, -1)
+            return x_grouped
 
-        return x_grouped
-
+        return x
 
     """
     결측 값을 0으로 변환
@@ -211,64 +207,65 @@ class MyModel(nn.Module):
         x[missing_mask] = 0.0
         return x
 
-
-    def forward(
-        self,
-
-        # Tabular 입력 (B, S, F)
-        x: torch.Tensor,
-
-        # Binary Encoding of Missing Values (B, S, F)
-        x_bemv: torch.Tensor,
-
-        # todo: 멀티모달 세팅을 위해 이미지 입력을 추가할 수 있으나 나중에 고려 (B, S, C, H, W)
-        x_img: torch.Tensor = None,
-    ):
-        # tabular
+    def forward(self, x: torch.Tensor, x_bemv: torch.Tensor, x_img: torch.Tensor = None):
         B, S, F = x.shape
 
         x = self._convert_zero_nan(x, x_bemv)
 
-        # tabular + time series serialization
         x_flat = self.time_series_serialization(x)
         x_bemv_flat = self.time_series_serialization(x_bemv)
 
-
-        # 범주형 변수 포함 변환
         x_flat = self.embedder(x_flat)
 
-        # MPDEncoder
-        # step_outputs_mpde, M_loss_mpde, attention_maps_mpde = self.mpde(x_flat, x_bemv_flat)
+        step_outputs_mpde, M_loss_mpde, att_dep = self.mpde(x_flat, x_bemv_flat)
+        mpde_feat_flat = torch.sum(torch.stack(step_outputs_mpde, dim=0), dim=0)
+        mpde_feat = self.time_series_grouping(mpde_feat_flat, x.shape)
 
+        step_outputs_mpie, M_loss_mpie, mpie_attention_maps = self.mpie(x_flat, x_bemv_flat)
+        mpie_feat_flat = torch.sum(torch.stack(step_outputs_mpie, dim=0), dim=0)
+        mpie_feat = self.time_series_grouping(mpie_feat_flat, x.shape)
 
-        # tabular Missing Pattern Independence Encoder (MPIE)
-        step_outputs, M_loss, attention_maps = self.mpie(x_flat, x_bemv_flat)
+        z_mpie = self.mpie_proj(mpie_feat)
+        z_mpie = self.activate(z_mpie)
+        z_mpie, tr_attn_mpie = self.mpie_transformer(z_mpie)
+        h_mpie = self.pool_mpie(z_mpie)
 
-        # 여러 step을 합쳐서 최종 토큰 (TabNet-style)
-        tab_tok = torch.sum(torch.stack(step_outputs, dim=0), dim=0)  # (B*S, n_d)
+        z_mpde = self.mpde_proj(mpde_feat)
+        z_mpde = self.activate(z_mpde)
+        z_mpde, tr_attn_mpde = self.mpde_transformer(z_mpde)
+        h_mpde = self.pool_mpde(z_mpde)
 
-        # (B*S, n_d) → (B, S, n_d)
-        tab_tok = self.time_series_grouping(tab_tok, x.shape)  # (B, S, n_d)
+        branch_tokens = [h_mpie, h_mpde]
 
-        # print("tab_tok.shape:", tab_tok.shape)
+        if self.multimodal_setting:
+            if x_img is None:
+                raise ValueError("multimodal_setting=True 인 경우 x_img가 필요합니다.")
+            img_feat = self.image_encoder(x_img)
+            img_feat = self.image_proj(img_feat)
+            img_feat = self.activate(img_feat)
+            branch_tokens.append(img_feat)
 
-        # (B, S, n_d) → (B, S, n_d)
-        z = self.tab_proj(tab_tok)
-        z = self.activate(z)
+        branch_seq = torch.stack(branch_tokens, dim=1)
+        branch_out, branch_attn = self.branch_attn(branch_seq, branch_seq, branch_seq)
 
+        B_out, T_out, D_out = branch_out.shape
+        h_final = branch_out.reshape(B_out, T_out * D_out)
 
-        # 포지셔널 임베딩 + Transformer 인코더
-        z = self.pos_emb(z)        # (B, S, n_d)
-        z, tr_attn_maps = self.transformer(z)  # z: (B, S, n_d), tr_attn_maps: list[L] of (B, H, S, S)
+        h_final = self.before_classifier(h_final)
+        h_final = self.activate(h_final)
+        h_final = self.before_classifier_2(h_final)
+        h_final = self.activate(h_final)
 
+        outs = self.classifier(h_final)
 
-        # 시퀀스 풀링 + 멀티태스크 classifier
-        h = self.pool(z)       # (B, n_d)
-        outs = self.classifier(h)  # List[(B, Ck)]
+        M_loss_total = M_loss_mpie + M_loss_mpde
 
-        # 학습에서 쓸 수 있도록 그대로 반환
-        return outs, M_loss, z, attention_maps, tr_attn_maps
+        tr_attn_maps = {
+            "mpde_att_dep": att_dep,
+            "mpie_attention_maps": mpie_attention_maps,
+            "mpie": tr_attn_mpie,
+            "mpde": tr_attn_mpde,
+            "branch": branch_attn,
+        }
 
-
-
-
+        return outs, M_loss_total, tr_attn_maps

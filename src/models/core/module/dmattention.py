@@ -168,3 +168,24 @@ class TransformerEncoderWithAttn(nn.Module):
 
         output = self.norm(output)
         return output, attn_maps
+
+
+
+class SelfAttention1D(nn.Module):
+    """
+    특징 축(F)에 대한 간단한 self-attention.
+    입력  x: (B, F)  →  출력 y: (B, F), attn: (B, F, F)
+    """
+    def __init__(self, d_model: int = 1, n_heads: int = 1):
+        super().__init__()
+        self.mha = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            batch_first=True
+        )
+
+    def forward(self, x: torch.Tensor):
+        # x: (B, F)
+        q = k = v = x.unsqueeze(-1)        # (B, F, 1)
+        y, attn = self.mha(q, k, v, need_weights=True)
+        return y.squeeze(-1), attn         # (B, F), (B, F, F)

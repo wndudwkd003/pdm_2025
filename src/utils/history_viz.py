@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import math
 import matplotlib.pyplot as plt
 
 
@@ -27,28 +28,112 @@ def _get_series(history: dict, key: str):
     return None
 
 
+def _calc_percentile(values: list[float], q: float) -> float | None:
+    """
+    values에서 q(0~1) 퍼센타일 값을 계산.
+    values가 비어 있으면 None 반환.
+    """
+    if len(values) == 0:
+        return None
+
+    sorted_vals = sorted(values)
+    # 0 <= q <= 1 가정
+    idx = int((len(sorted_vals) - 1) * q)
+    return sorted_vals[idx]
+
+
+def _plot_metric_with_zoom(
+    series_list: list[list[float]],
+    labels: list[str],
+    xlab: str,
+    ylab: str,
+    title: str,
+    save_dir: Path,
+    basename: str,
+    zoom_percentile: float = 0.95,
+):
+    """
+    - series_list: 각 라인의 y값 리스트들 [s1, s2, ...]
+    - labels: 각 라인의 라벨들 ["train_loss", "valid_loss", ...]
+    - basename: 저장 파일 이름의 기본 이름 (예: "loss" → loss.png, loss_zoom.png)
+    - zoom_percentile: 줌 그래프에서 상한을 잡을 퍼센타일 (0.95 → 상위 5% 잘라냄)
+    """
+
+    # 1) 원본(full-scale) 그래프
+    plt.figure()
+    for s, lab in zip(series_list, labels):
+        plt.plot(s, label=lab)
+    plt.xlabel(xlab)
+    plt.ylabel(ylab)
+    plt.title(title)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(save_dir / f"{basename}.png", dpi=150)
+    plt.close()
+
+    # 2) zoom 그래프 (상위 일부 튀는 값 잘라낸 y축)
+    #    - 모든 시리즈를 합쳐서 퍼센타일 기준 상한을 계산
+    all_values: list[float] = []
+    for s in series_list:
+        for v in s:
+            # 숫자 타입이고 finite인 값만 사용
+            if isinstance(v, (int, float)):
+                fv = float(v)
+                if math.isfinite(fv):
+                    all_values.append(fv)
+
+    if len(all_values) == 0:
+        # 사용할 수 있는 값이 없으면 zoom 그래프는 건너뜀
+        return
+
+    low = min(all_values)
+    high = _calc_percentile(all_values, zoom_percentile)
+    if high is None:
+        return
+
+    # high와 low가 같거나 high < low이면 줌 의미가 없으므로 건너뜀
+    if not (high > low):
+        return
+
+    plt.figure()
+    for s, lab in zip(series_list, labels):
+        plt.plot(s, label=lab)
+    plt.xlabel(xlab)
+    plt.ylabel(ylab)
+    plt.title(f"{title} (zoom)")
+    plt.legend()
+    plt.grid(True)
+    # y축을 '대부분 값이 있는 구간'으로 제한
+    plt.ylim(low, high)
+    plt.tight_layout()
+    plt.savefig(save_dir / f"{basename}_zoom.png", dpi=150)
+    plt.close()
+
+
 def save_history_graphs(history: dict, save_dir: Path):
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
     # -------------------------------------------------
     # 1) loss: train_loss / valid_loss 한 그림에 같이
+    #    + zoom 버전(loss_zoom.png) 추가
     # -------------------------------------------------
     train_loss = _get_series(history, "train_loss")
     valid_loss = _get_series(history, "valid_loss")
 
     if train_loss is not None and valid_loss is not None:
-        plt.figure()
-        plt.plot(train_loss, label="train_loss")
-        plt.plot(valid_loss, label="valid_loss")
-        plt.xlabel("Epoch")
-        plt.ylabel("loss")
-        plt.title("loss")
-        plt.legend()
-        plt.grid(True)
-        plt.tight_layout()
-        plt.savefig(save_dir / "loss.png", dpi=150)
-        plt.close()
+        # 원본 + zoom 두 개 저장
+        _plot_metric_with_zoom(
+            series_list=[train_loss, valid_loss],
+            labels=["train_loss", "valid_loss"],
+            xlab="Epoch",
+            ylab="loss",
+            title="loss",
+            save_dir=save_dir,
+            basename="loss",          # loss.png, loss_zoom.png
+            zoom_percentile=0.95,     # 상위 5%는 잘라내는 기준
+        )
     else:
         # 혹시 옛날 형식(history["loss"])을 쓸 수도 있으니 남겨둠
         loss_series = _get_series(history, "loss")

@@ -22,6 +22,7 @@ class Config:
     # 마스킹 비율
     masking_ratio: float = 0.2
 
+
     # "none" | "mcar" | "block_t" | "per_sensor"
     masking_mode: str = "mcar"
 
@@ -37,4 +38,4 @@ class Config:
 
 
     # === Test용 모델 로드 경로 ===
-    load_model: str = "outputs/2025-11-14_13-25-06_mymodel_mptms_mcar_0.2"
+    load_model: str = "outputs/2025-11-15_15-13-52_mymodel_mptms_mcar_0.6"

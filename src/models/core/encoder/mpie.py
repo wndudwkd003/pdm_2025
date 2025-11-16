@@ -140,10 +140,9 @@ class MPIEncoder(nn.Module):
             # attentive transformer
             tab_mask = self.att_transformers[step](prior, att)
 
-            # print("tab_mask:", tab_mask[0, :8])
-            # print("tab_mask.shape", tab_mask.shape)
-
-            M_loss += torch.mean(torch.sum(tab_mask * torch.log(tab_mask + self.epsilon), dim=1))
+            M_loss += torch.mean(
+                torch.sum(tab_mask * torch.log(tab_mask + self.epsilon), dim=1)
+            )
 
             # update prior
             prior = prior * (self.gamma - tab_mask)

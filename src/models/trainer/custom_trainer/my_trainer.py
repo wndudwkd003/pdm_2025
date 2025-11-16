@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from src.data.collator_class.collator_base.base_collator import BaseCollator
 from src.models.trainer.base_trainer.base_trainer import BaseTrainer
@@ -36,6 +37,7 @@ class MyModelTrainer(BaseTrainer):
         )
 
         self.lambda_sparse = model_config.lambda_sparse
+        self.lambda_recon = model_config.lambda_recon
 
         self.device = model_config.device
         self.model: MyModel | None = None
@@ -50,11 +52,19 @@ class MyModelTrainer(BaseTrainer):
     # Batch 공통 처리
     # ---------------------------------------------------------
     def _prepare_batch(self, batch):
-        x = batch["x"].to(self.device)
+        x = batch["x"].to(self.device)               # 마스킹된 입력
+        x_original = batch["x_original"].to(self.device)  # 마스킹 전 원본
         y = batch["y"].to(self.device)
+
         nan_mask = torch.isnan(x)
         bemv = (~nan_mask).to(x.dtype)
-        return x, y, bemv
+
+        x_img = batch.get("x_img", None)
+        if x_img is not None:
+            x_img = x_img.to(self.device)
+
+        return x, x_original, x_img, y, bemv
+
 
     # ---------------------------------------------------------
     # train / valid epoch
@@ -83,19 +93,33 @@ class MyModelTrainer(BaseTrainer):
         all_preds = []
 
         for batch in data_loader:
-            x, y, bemv = self._prepare_batch(batch)
+            x, x_original, x_img, y, bemv = self._prepare_batch(batch)
 
             with torch.set_grad_enabled(is_train):
-                outs, M_loss, z, mpie_attention_maps, tr_attn_maps = model(x, bemv)
+                # ------------------------------
+                # 모델 forward
+                # ------------------------------
+                if x_img is not None:
+                    outs, M_loss, tr_attn_maps = model(x, bemv, x_img=x_img)
+                else:
+                    outs, M_loss, tr_attn_maps = model(x, bemv)
 
+                # ------------------------------
+                # Attention 캐시 (logging용)
+                # ------------------------------
                 if need_log:
+                    # MPD/MPIE encoder에서 나오는 attention
+                    mpie_enc_maps = tr_attn_maps.get("mpie_attention_maps", None)
+                    # 여기서는 MPIE용 Transformer attention을 tr_attention_maps로 사용
+                    tr_maps = tr_attn_maps.get("mpie", None)
+
                     mpie_list_cpu = None
-                    if mpie_attention_maps is not None:
-                        mpie_list_cpu = [A.detach().cpu() for A in mpie_attention_maps]
+                    if mpie_enc_maps is not None:
+                        mpie_list_cpu = [A.detach().cpu() for A in mpie_enc_maps]
 
                     tr_list_cpu = None
-                    if tr_attn_maps is not None:
-                        tr_list_cpu = [A.detach().cpu() for A in tr_attn_maps]
+                    if tr_maps is not None:
+                        tr_list_cpu = [A.detach().cpu() for A in tr_maps]
 
                     self._attn_cache[phase] = {
                         "x": x.detach().cpu(),
@@ -105,15 +129,21 @@ class MyModelTrainer(BaseTrainer):
                     }
                     need_log = False
 
+                # ------------------------------
                 # supervised loss
+                # ------------------------------
                 sup_loss = 0.0
                 for task_idx, logits in enumerate(outs):
                     sup_loss += criterion(logits, y[:, task_idx].long())
                 sup_loss /= num_tasks
 
-                # sparsity 정규화
+                # ------------------------------
+                # sparsity 정규화 (MPIE + MPDE 합산)
+                # ------------------------------
                 reg_loss = - self.lambda_sparse * M_loss
 
+
+                # 최종 loss
                 loss = sup_loss + reg_loss
 
                 if is_train:
@@ -124,16 +154,24 @@ class MyModelTrainer(BaseTrainer):
             total_loss += loss.item()
             num_batches += 1
 
+            # ------------------------------
+            # validation용 prediction 저장
+            # ------------------------------
             if not is_train:
                 with torch.no_grad():
-                    pred_list = [torch.argmax(logits, dim=1).cpu().numpy() for logits in outs]
+                    pred_list = [
+                        torch.argmax(logits, dim=1).cpu().numpy()
+                        for logits in outs
+                    ]
                     all_preds.append(np.stack(pred_list, axis=1))
                     all_targets.append(y.cpu().numpy())
 
         if is_train:
             return total_loss / max(1, num_batches)
 
-        # evaluation
+        # ------------------------------
+        # evaluation metrics
+        # ------------------------------
         if len(all_preds) == 0:
             return {"num_samples": 0}
 
@@ -144,6 +182,7 @@ class MyModelTrainer(BaseTrainer):
         metrics["num_samples"] = y_true.shape[0]
         metrics["loss"] = total_loss / max(1, num_batches)
         return metrics
+
 
     # ---------------------------------------------------------
     # 학습 루프
@@ -173,6 +212,7 @@ class MyModelTrainer(BaseTrainer):
             input_dim=F,
             output_dim=self.model_config.output_dims,
             n_steps=self.model_config.n_steps,
+            multimodal_setting=self.model_config.multimodal_setting,
         ).to(self.device)
 
         model = self.model
@@ -309,6 +349,7 @@ class MyModelTrainer(BaseTrainer):
                 input_dim=F,
                 output_dim=self.model_config.output_dims,
                 n_steps=self.model_config.n_steps,
+                multimodal_setting=self.model_config.multimodal_setting,
             ).to(self.device)
 
             weight_file = self._loaded_model_path / self.model_config.save_model_name

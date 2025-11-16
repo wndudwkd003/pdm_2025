@@ -6,8 +6,8 @@ from typing import Sequence
 @dataclass
 class BaseModelConfig:
     seed: int = 42
-    batch_size: int = 256
-    num_workers: int = 8
+    batch_size: int = 128
+    num_workers: int = 0
     drop_last: bool = True
     pin_memory: bool = True
     max_epochs: int = 30
@@ -21,6 +21,7 @@ class BaseModelConfig:
 
 @dataclass
 class MyModelConfig(BaseModelConfig):
+    multimodal_setting: bool = True
     device: str = "cuda"
     model_ext: str = "zip"
 
@@ -30,6 +31,7 @@ class MyModelConfig(BaseModelConfig):
 
     min_learning_rate: float = 1e-5
     lambda_sparse: float = 1e-3
+    lambda_recon: float = 1.5
 
 
     # TabNet / MPIE / MPDE 관련 하이퍼파라미터
