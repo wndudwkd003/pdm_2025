@@ -5,6 +5,8 @@ import numpy as np
 from torch.utils.data import DataLoader
 from src.data.collator_class.collator_base.base_collator import BaseCollator
 from configs.model.model_configs import BaseModelConfig
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
 
 
 class BaseTrainer(ABC):
@@ -24,11 +26,44 @@ class BaseTrainer(ABC):
         self.metadata = metadata
 
 
+    # def make_loader(
+    #     self,
+    #     dataset,
+    #     shuffle: bool = False, # validation 시 False
+    # ):
+    #     return DataLoader(
+    #         dataset,
+    #         batch_size=self.model_config.batch_size,
+    #         shuffle=shuffle,
+    #         num_workers=self.model_config.num_workers,
+    #         collate_fn=self.data_collator,
+    #         drop_last=self.model_config.drop_last,
+    #         pin_memory=self.model_config.pin_memory,
+    #     )
+
     def make_loader(
         self,
         dataset,
-        shuffle: bool = False, # validation 시 False
+        shuffle: bool = False,
     ):
+        is_distributed = dist.is_available() and dist.is_initialized()
+
+        if is_distributed:
+            sampler = DistributedSampler(
+                dataset,
+                shuffle=shuffle,
+            )
+            return DataLoader(
+                dataset,
+                batch_size=self.model_config.batch_size,
+                sampler=sampler,
+                shuffle=False,
+                num_workers=self.model_config.num_workers,
+                collate_fn=self.data_collator,
+                drop_last=self.model_config.drop_last,
+                pin_memory=self.model_config.pin_memory,
+            )
+
         return DataLoader(
             dataset,
             batch_size=self.model_config.batch_size,
@@ -38,6 +73,7 @@ class BaseTrainer(ABC):
             drop_last=self.model_config.drop_last,
             pin_memory=self.model_config.pin_memory,
         )
+
 
     def _dataset_to_numpy(
         self,

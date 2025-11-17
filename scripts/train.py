@@ -1,7 +1,14 @@
 # main.py
+import os
 import torch
+import torch.distributed as dist
 torch.set_float32_matmul_precision("high")  # 또는 "medium"
 from src.utils.seeds import set_seeds
+import os
+
+
+
+
 from configs.config import Config
 from src.data.dataset_manager import DatasetManager
 from src.data.collator_manager import CollatorManager
@@ -29,18 +36,37 @@ def main(cfg: Config):
         cfg.masking_ratio, cfg.masking_mode
     )
 
+    # -------------------------
+    # DDP 초기화
+    # -------------------------
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    use_ddp = world_size > 1
+
+    if use_ddp:
+        dist.init_process_group(backend="nccl")
+        local_rank = int(os.environ["LOCAL_RANK"])
+        torch.cuda.set_device(local_rank)
+    else:
+        local_rank = 0
+
+    is_main_rank = (local_rank == 0)
+
     train_files, valid_files = prepare_split_dataset(cfg.data_dir, cfg.train, cfg.seed, cfg.split_ratio)
     dataset_cls = DatasetManager.get_class(cfg.data_type)
 
     train_ds = dataset_cls(jsonl_files=train_files)
     valid_ds = dataset_cls(jsonl_files=valid_files)
 
-    # 메타데이터 설정
     metadata = train_ds.meta
 
-    print(f"Train dataset size: {len(train_ds)}, Validation dataset size: {len(valid_ds)}")
+    if is_main_rank:
+        print(f"Train dataset size: {len(train_ds)}, Validation dataset size: {len(valid_ds)}")
 
-    model_config = ConfigManager.get_model_config(cfg.model_type) # instance of ModelConfig
+    model_config = ConfigManager.get_model_config(cfg.model_type)
+    if use_ddp:
+        model_config.device = f"cuda:{local_rank}"
+    else:
+        model_config.device = "cuda"
 
     trainer = TrainerManager.get_trainer(
         model_type=cfg.model_type,
@@ -53,18 +79,19 @@ def main(cfg: Config):
             csv_has_header=cfg.csv_has_header,
             seed=cfg.seed,
         ),
-        # 모델 설정은 ConfigManager를 통해 가져옴
         model_config=model_config,
         metadata=metadata
     )
 
     history = trainer.fit(train_dataset=train_ds, valid_dataset=valid_ds)
 
-    save_history_artifacts(history, save_dir / "history")
+    if is_main_rank:
+        save_history_artifacts(history, save_dir / "history")
+        save_path = trainer.save(save_dir / "final")
+        print(f"Training completed and model saved to {save_path.absolute()}")
 
-    save_path = trainer.save(save_dir / "final")
-
-    print(f"Training completed and model saved to {save_path.absolute()}")
+    if use_ddp:
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":

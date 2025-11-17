@@ -158,6 +158,7 @@ class MyModel(nn.Module):
 
         self.pool_mpie = TemporalWeightedMeanPool(init_alpha=1.0)
         self.pool_mpde = TemporalWeightedMeanPool(init_alpha=1.0)
+        self.pool_img = TemporalWeightedMeanPool(init_alpha=1.0)
 
         self.branch_attn = nn.MultiheadAttention(
             embed_dim=self.n_d,
@@ -238,9 +239,15 @@ class MyModel(nn.Module):
         branch_tokens = [h_mpie, h_mpde]
 
         if self.multimodal_setting:
-            if x_img is None:
-                raise ValueError("multimodal_setting=True 인 경우 x_img가 필요합니다.")
-            img_feat = self.image_encoder(x_img)
+            B_img, S_img, C, H_img, W_img = x_img.shape
+            x_img_flat = x_img.view(B_img * S_img, C, H_img, W_img)
+
+            img_feat_flat = self.image_encoder(x_img_flat)
+            img_feat_seq = img_feat_flat.view(B_img, S_img, -1)
+
+            # img_feat = img_feat_seq.mean(dim=1)
+            img_feat = self.pool_img(img_feat_seq)
+
             img_feat = self.image_proj(img_feat)
             img_feat = self.activate(img_feat)
             branch_tokens.append(img_feat)

@@ -7,10 +7,10 @@ from typing import Sequence
 class BaseModelConfig:
     seed: int = 42
     batch_size: int = 128
-    num_workers: int = 0
+    num_workers: int = 3
     drop_last: bool = True
     pin_memory: bool = True
-    max_epochs: int = 30
+    max_epochs: int = 50
     learning_rate: float = 1e-3 # 1e-3
     weight_decay: float = 1e-5
     patience_count: int = 10
@@ -21,7 +21,8 @@ class BaseModelConfig:
 
 @dataclass
 class MyModelConfig(BaseModelConfig):
-    multimodal_setting: bool = True
+    patience_count: int = 15
+    multimodal_setting: bool = False
     device: str = "cuda"
     model_ext: str = "zip"
 
