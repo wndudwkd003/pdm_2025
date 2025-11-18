@@ -34,6 +34,9 @@ class XGBTrainer(BaseTrainer):
         X_tr, y_tr = self._dataset_to_numpy(train_dataset)
         X_va, y_va = self._dataset_to_numpy(valid_dataset)
 
+        print(X_tr.shape)
+
+
         T = y_tr.shape[1]
         self.models = []
         history: dict[str, Any] = {}

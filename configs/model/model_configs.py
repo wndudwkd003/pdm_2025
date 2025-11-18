@@ -13,7 +13,7 @@ class BaseModelConfig:
     max_epochs: int = 50
     learning_rate: float = 1e-3 # 1e-3
     weight_decay: float = 1e-5
-    patience_count: int = 10
+    patience_count: int = 15
     num_classes: int = 4
     save_model_name: str = "save_model"
     multimodal_setting: bool = False
@@ -22,7 +22,7 @@ class BaseModelConfig:
 
 @dataclass
 class MyModelConfig(BaseModelConfig):
-    patience_count: int = 15
+
     multimodal_setting: bool = False
     device: str = "cuda"
     model_ext: str = "zip"

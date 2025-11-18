@@ -61,28 +61,44 @@ class MPTMSTabNetCollator(BaseCollator):
     def _apply_mask(self, x: np.ndarray, F: int, T: int) -> tuple[np.ndarray, np.ndarray]:
         """
         x: (D,) = (T*F,)
-        반환: (x_masked: (D,), obs_mask: (D,))  # obs_mask: 관측=1, 마스킹=0
+        반환: (x_masked: (D,), obs_mask: (D,))
+        obs_mask: 관측 = 1.0, 마스킹 = 0.0
         """
         D = x.shape[0]
         obs = np.ones(D, dtype=np.float32)
 
+        # ------------------------
+        # 마스킹 없음
+        # ------------------------
         if self.masking_mode == "none" or self.masking_ratio <= 0.0:
             return x, obs
 
         r = self.masking_ratio
 
-
-        # mcar 완전 랜덤 마스킹
+        # =====================================================
+        # 정확한 비율을 보장하는 MCAR (권장)
+        # =====================================================
         if self.masking_mode == "mcar":
-            m = self.rng.random(D) >= r          # True=관측
-            obs = m.astype(np.float32)
-            x_masked = x.copy()
-            x_masked[obs == 0.0] = self.mask_fill
-            return x_masked, obs
+            # 정확히 round(r * D) 개만큼 마스킹
+            k = int(round(r * D))
+            if k > 0:
+                # 마스킹될 index D개 중 k개 선택
+                masked_idx = self.rng.choice(D, size=k, replace=False)
 
+                x_masked = x.copy()
+                x_masked[masked_idx] = self.mask_fill
+                obs[masked_idx] = 0.0
+
+                return x_masked, obs
+
+            # k == 0이면 마스킹 없음
+            return x, obs
+
+        # =====================================================
+        # block_t: 타임스텝 단위 전체 피처 마스킹
+        # =====================================================
         if self.masking_mode == "block_t":
-            # 타임스텝 단위로 전체 피처를 가림
-            k = int(round(r * T))                # 가릴 타임스텝 수
+            k = int(round(r * T))
             if k > 0:
                 ts = self.rng.choice(T, size=min(k, T), replace=False)
                 x_masked = x.copy()
@@ -94,8 +110,10 @@ class MPTMSTabNetCollator(BaseCollator):
                 return x_masked, obs
             return x, obs
 
+        # =====================================================
+        # per_sensor: 특정 피처(센서) 전체 시계열 마스킹
+        # =====================================================
         if self.masking_mode == "per_sensor":
-            # 피처(센서) 단위로 전체 타임에 대해 가림
             s_cnt = int(round(r * F))
             if s_cnt > 0:
                 fs = self.rng.choice(F, size=min(s_cnt, F), replace=False)
@@ -109,8 +127,9 @@ class MPTMSTabNetCollator(BaseCollator):
                 return x_masked, obs
             return x, obs
 
-        # 알 수 없는 모드는 그대로 반환
+        # 기본 반환
         return x, obs
+
 
     def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         Xs: list[np.ndarray] = []

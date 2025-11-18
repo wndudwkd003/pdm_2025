@@ -88,6 +88,7 @@ class BaseTrainer(ABC):
         Ys: list[np.ndarray] = []
         for batch in loader:
             Xs.append(batch["x"].cpu().numpy())   # (B, D)
+
             Ys.append(batch["y"].cpu().numpy())   # (B, T_out)
         X = np.concatenate(Xs, axis=0)            # (N, D)
         Y = np.concatenate(Ys, axis=0)            # (N, T_out)
