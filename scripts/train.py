@@ -5,10 +5,6 @@ import torch.distributed as dist
 torch.set_float32_matmul_precision("high")  # 또는 "medium"
 from src.utils.seeds import set_seeds
 import os
-
-
-
-
 from configs.config import Config
 from src.data.dataset_manager import DatasetManager
 from src.data.collator_manager import CollatorManager
@@ -78,6 +74,7 @@ def main(cfg: Config):
             mask_fill=cfg.mask_fill,
             csv_has_header=cfg.csv_has_header,
             seed=cfg.seed,
+            multimodal_setting=model_config.multimodal_setting,
         ),
         model_config=model_config,
         metadata=metadata

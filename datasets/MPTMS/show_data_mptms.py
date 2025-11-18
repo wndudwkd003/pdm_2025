@@ -97,6 +97,8 @@ def main():
         scale = 3
         h, w = img_colored.shape[:2]
         print(f"원본 이미지 크기: {w}x{h}") # 160 120
+
+        exit()
         img_resized = cv2.resize(img_colored, (int(w * scale), int(h * scale)))
 
         # JPEG 저장 (항상 저장)

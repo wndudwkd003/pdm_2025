@@ -128,8 +128,22 @@ class MyModel(nn.Module):
         )
 
         if self.multimodal_setting:
-            self.image_encoder = DINOv2EncoderHub(model_name=self.image_encoder_model)
-            self.image_proj = nn.Linear(self.image_feat_dim, self.n_d)
+            # 1) DINOv2 백본은 freeze 모드로 생성
+            self.image_encoder = DINOv2EncoderHub(
+                model_name=self.image_encoder_model,
+                freeze_backbone=True,
+            )
+
+            # 2) DINO feature (image_feat_dim) → n_d 로 가는 MLP head
+            mlp_hidden_dim = self.n_d * 2 # 필요하면 따로 하이퍼파라미터로 빼셔도 됩니다.
+            self.image_mlp = nn.Sequential(
+                nn.Linear(self.image_feat_dim, mlp_hidden_dim),
+                nn.GELU(),
+                nn.Linear(mlp_hidden_dim, mlp_hidden_dim),
+                nn.GELU(),
+                nn.Linear(mlp_hidden_dim, self.n_d),
+
+            )
 
         self.fuse_mpie_mpde = nn.Linear(2 * self.n_d, self.n_d)
 
@@ -242,13 +256,19 @@ class MyModel(nn.Module):
             B_img, S_img, C, H_img, W_img = x_img.shape
             x_img_flat = x_img.view(B_img * S_img, C, H_img, W_img)
 
-            img_feat_flat = self.image_encoder(x_img_flat)
-            img_feat_seq = img_feat_flat.view(B_img, S_img, -1)
+            # 1) frozen DINOv2 backbone에서 feature 추출 (gradient X)
+            img_feat_flat = self.image_encoder(x_img_flat)            # (B*S, image_feat_dim)
 
-            # img_feat = img_feat_seq.mean(dim=1)
-            img_feat = self.pool_img(img_feat_seq)
+            # 2) time dimension 복원
+            img_feat_seq = img_feat_flat.view(B_img, S_img, -1)       # (B, S, image_feat_dim)
 
-            img_feat = self.image_proj(img_feat)
+            # 3) temporal pooling (여기까지는 여전히 frozen feature)
+            img_feat = self.pool_img(img_feat_seq)                    # (B, image_feat_dim)
+
+            # 4) 학습되는 MLP head
+            img_feat = self.image_mlp(img_feat)                       # (B, n_d)
+
+            # 5) 나머지 branch들과 동일하게 활성화 후 사용
             img_feat = self.activate(img_feat)
             branch_tokens.append(img_feat)
 

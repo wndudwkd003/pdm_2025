@@ -1,5 +1,9 @@
-datasets/*/data/
-datasets/*/processed_data/
+datasets/*/data
+datasets/*/processed_data
+
+
+*.npz
+
 
 *.pyc
 *.pyo

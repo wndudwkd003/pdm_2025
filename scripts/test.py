@@ -43,6 +43,7 @@ def main(cfg: Config):
             mask_fill=cfg.mask_fill,
             csv_has_header=cfg.csv_has_header,
             seed=cfg.seed,
+            multimodal_setting=model_config.multimodal_setting,
         ),
         # 모델 설정은 ConfigManager를 통해 가져옴
         model_config=model_config,

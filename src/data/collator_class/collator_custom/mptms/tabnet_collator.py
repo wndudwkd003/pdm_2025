@@ -17,6 +17,7 @@ class MPTMSTabNetCollator(BaseCollator):
         mask_fill: float = 0.0,              # 마스킹 시 채울 값
         csv_has_header: bool = True,
         seed: int | None = None,
+        multimodal_setting: bool = False,
     ):
         super().__init__(
             append_mask_indicator=append_mask_indicator,

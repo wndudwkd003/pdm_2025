@@ -6,23 +6,23 @@ from typing import Sequence
 @dataclass
 class BaseModelConfig:
     seed: int = 42
-    batch_size: int = 128
-    num_workers: int = 3
+    batch_size: int = 64
+    num_workers: int = 1
     drop_last: bool = True
     pin_memory: bool = True
     max_epochs: int = 50
-    learning_rate: float = 1e-3 # 1e-3
-    weight_decay: float = 1e-5
+    learning_rate: float = 2e-3 # 1e-3
+    weight_decay: float = 2e-4
     patience_count: int = 10
     num_classes: int = 4
     save_model_name: str = "save_model"
+    multimodal_setting: bool = False
 
 
 
 @dataclass
 class MyModelConfig(BaseModelConfig):
     patience_count: int = 15
-    multimodal_setting: bool = False
     device: str = "cuda"
     model_ext: str = "zip"
 
@@ -41,7 +41,7 @@ class MyModelConfig(BaseModelConfig):
     n_shared: int = 4
     n_independent: int = 4
     n_steps: int = 8
-    virtual_batch_size: int = 128
+    virtual_batch_size: int = 64
     momentum: float = 0.02
     mask_type: str = "sparsemax"
     bias: bool = True

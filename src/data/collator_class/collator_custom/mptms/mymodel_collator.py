@@ -175,7 +175,8 @@ class MPTMSMyModelCollator(BaseCollator):
         mask_fill: float = 0.0,
         csv_has_header: bool = True,
         seed: int | None = None,
-        image_size: int = 224,               # 출력 이미지 한 변 크기 (H=W=image_size)
+        image_size: int = 224,
+        multimodal_setting: bool = False,
     ):
         super().__init__(
             append_mask_indicator=append_mask_indicator,
@@ -188,6 +189,7 @@ class MPTMSMyModelCollator(BaseCollator):
         self.csv_has_header = csv_has_header
         self.rng = np.random.default_rng(seed)
         self.image_size = int(image_size)
+        self.multimodal_setting = bool(multimodal_setting)
 
     def _load_csvs_as_ts(self, csv_paths: list[str]) -> tuple[np.ndarray, int, int]:
         rows: list[np.ndarray] = []
@@ -309,14 +311,15 @@ class MPTMSMyModelCollator(BaseCollator):
             Xs.append(x_ts_masked)
 
             # 이미지 시퀀스 로딩
-            image_paths = sample["input_files"].get("images", None)
-            if image_paths is not None:
-                img_ts = self._load_images_as_ts(image_paths)  # (S_img, 3, H, W)
-                if img_ts.shape[0] != S:
-                    raise ValueError(
-                        f"CSV 시퀀스 길이(S={S})와 이미지 시퀀스 길이({img_ts.shape[0]})가 다릅니다."
-                    )
-                X_imgs.append(img_ts)
+            if self.multimodal_setting:
+                image_paths = sample["input_files"].get("images", None)
+                if image_paths is not None:
+                    img_ts = self._load_images_as_ts(image_paths)  # (S_img, 3, H, W)
+                    if img_ts.shape[0] != S:
+                        raise ValueError(
+                            f"CSV 시퀀스 길이(S={S})와 이미지 시퀀스 길이({img_ts.shape[0]})가 다릅니다."
+                        )
+                    X_imgs.append(img_ts)
 
             y_vec = self._flatten_jsons(sample["target_files"]["labels"])
             ys.append(y_vec)
@@ -333,7 +336,7 @@ class MPTMSMyModelCollator(BaseCollator):
             "metadata": metas,
         }
 
-        if len(X_imgs) > 0:
+        if self.multimodal_setting and len(X_imgs) > 0:
             X_img = torch.from_numpy(np.stack(X_imgs, axis=0))  # (B, S, 3, H, W)
             batch_dict["x_img"] = X_img
 
