@@ -6,8 +6,8 @@ from configs.params.model import ModelType
 
 @dataclass
 class Config:
-    data_dir: str = "datasets/c-mapss/processed_data"
-    data_type: DatasetType = DatasetType.CMPASS
+    data_dir: str = "datasets/MPTMS/processed_data"
+    data_type: DatasetType = DatasetType.MPTMS
     seed: int = 42
 
     train: str = "train"
@@ -20,7 +20,7 @@ class Config:
     save_dir: str = "outputs"
 
     # 마스킹 비율
-    masking_ratio: float = 0.2
+    masking_ratio: float = 0.6
 
 
     # "none" | "mcar" | "block_t" | "per_sensor"
@@ -32,10 +32,10 @@ class Config:
     # 마스킹 채움값
     mask_fill: float = -100.0
 
-    csv_has_header: bool = False
+    csv_has_header: bool = True
 
     sincos_enabled: bool = True
 
 
     # === Test용 모델 로드 경로 ===
-    load_model: str = "outputs/2025-11-18_12-16-45_xgboost_c-mapss_none_0.0"
+    load_model: str = "outputs/2025-11-20_08-06-37_xgboost_mptms_mcar_0.6"

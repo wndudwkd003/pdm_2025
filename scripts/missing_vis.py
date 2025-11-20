@@ -138,16 +138,16 @@ def plot_overall_metrics_vs_missing_rate(missing_rates, metrics_list, save_dir: 
 if __name__ == "__main__":
     # 예시: 질문에서 주신 start / end 경로
     start_dir = Path(
-        "outputs/2025-11-17_15-43-12_xgboost_mptms_mcar_0.2"
+        "outputs/2025-11-18_15-10-39_xgboost_c-mapss_none_0.0"
     )
     end_dir = Path(
-        "outputs/2025-11-17_15-48-48_xgboost_mptms_mcar_0.8"
+        "outputs/2025-11-18_16-59-58_xgboost_c-mapss_mcar_0.8"
     )
 
-    run_prefix = "xgboost_mptms"
+    run_prefix = "xgboost_c-mapss"
 
     # 요약 그래프 저장 위치
-    save_dir = start_dir.parent / "summary_plots_xgboost_mptms_range"
+    save_dir = start_dir.parent / "summary_plots_xgboost_c-mapss_range"
 
     missing_rates, metrics_list = load_metrics_by_missing_rate_range(
         start_dir=start_dir,
