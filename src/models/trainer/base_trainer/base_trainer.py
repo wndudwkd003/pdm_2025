@@ -52,6 +52,7 @@ class BaseTrainer(ABC):
             sampler = DistributedSampler(
                 dataset,
                 shuffle=shuffle,
+                seed=self.model_config.seed
             )
             return DataLoader(
                 dataset,

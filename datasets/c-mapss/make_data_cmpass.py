@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # ── 설정 ────────────────────────────────────────────
-DATASETS  = ['FD001', 'FD002', 'FD003', 'FD004']   # 처리할 파일
+DATASETS  = ['FD001', 'FD003']   # 처리할 파일
 SHIFT     = 0                                      # 0 = 그대로, 1·2 … = 뒤로 밀기
 
 BASE_DIR  = Path('datasets/c-mapss/data/CMaps')

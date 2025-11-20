@@ -41,7 +41,6 @@ def _calc_percentile(values: list[float], q: float) -> float | None:
     idx = int((len(sorted_vals) - 1) * q)
     return sorted_vals[idx]
 
-
 def _plot_metric_with_zoom(
     series_list: list[list[float]],
     labels: list[str],
@@ -52,14 +51,6 @@ def _plot_metric_with_zoom(
     basename: str,
     zoom_percentile: float = 0.95,
 ):
-    """
-    - series_list: 각 라인의 y값 리스트들 [s1, s2, ...]
-    - labels: 각 라인의 라벨들 ["train_loss", "valid_loss", ...]
-    - basename: 저장 파일 이름의 기본 이름 (예: "loss" → loss.png, loss_zoom.png)
-    - zoom_percentile: 줌 그래프에서 상한을 잡을 퍼센타일 (0.95 → 상위 5% 잘라냄)
-    """
-
-    # 1) 원본(full-scale) 그래프
     plt.figure()
     for s, lab in zip(series_list, labels):
         plt.plot(s, label=lab)
@@ -72,19 +63,15 @@ def _plot_metric_with_zoom(
     plt.savefig(save_dir / f"{basename}.png", dpi=150)
     plt.close()
 
-    # 2) zoom 그래프 (상위 일부 튀는 값 잘라낸 y축)
-    #    - 모든 시리즈를 합쳐서 퍼센타일 기준 상한을 계산
     all_values: list[float] = []
     for s in series_list:
         for v in s:
-            # 숫자 타입이고 finite인 값만 사용
             if isinstance(v, (int, float)):
                 fv = float(v)
                 if math.isfinite(fv):
                     all_values.append(fv)
 
     if len(all_values) == 0:
-        # 사용할 수 있는 값이 없으면 zoom 그래프는 건너뜀
         return
 
     low = min(all_values)
@@ -92,9 +79,13 @@ def _plot_metric_with_zoom(
     if high is None:
         return
 
-    # high와 low가 같거나 high < low이면 줌 의미가 없으므로 건너뜀
     if not (high > low):
         return
+
+    span = high - low
+    margin = span * 0.05
+    y_min = low - margin
+    y_max = high + margin
 
     plt.figure()
     for s, lab in zip(series_list, labels):
@@ -104,11 +95,11 @@ def _plot_metric_with_zoom(
     plt.title(f"{title} (zoom)")
     plt.legend()
     plt.grid(True)
-    # y축을 '대부분 값이 있는 구간'으로 제한
-    plt.ylim(low, high)
+    plt.ylim(y_min, y_max)
     plt.tight_layout()
     plt.savefig(save_dir / f"{basename}_zoom.png", dpi=150)
     plt.close()
+
 
 
 def save_history_graphs(history: dict, save_dir: Path):

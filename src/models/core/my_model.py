@@ -1,33 +1,30 @@
 import torch
 import torch.nn as nn
-from typing import Sequence
-from src.models.core.utils.groups import create_group_matrix
 
+from typing import Sequence
 
 import warnings
 warnings.filterwarnings("ignore", message="xFormers is available")
-
-
-from src.models.core.module.sequences import (
-    PositionalEmbedding,
-    SequencePoolMean,
-    TemporalWeightedMeanPool
-)
-from src.models.core.module.image_encoder import DINOv2EncoderHub
-from src.models.core.module.fusions import FusionConcat
-
-from src.models.core.module.head_module import Classifier
-from src.models.core.module.tabular_encoder import TabNetEncoder
-from src.models.core.module.category import EmbeddingGenerator
 
 from src.models.core.encoder.mpie import MPIEncoder
 from src.models.core.encoder.mpde import (
     MPDEncoder,
     MPDDecoder,
 )
-from src.models.core.module.dmattention import TransformerEncoderWithAttn
-from deeptlf import DeepTFL, TreeDrivenEncoder
 
+from src.models.core.module.image_encoder import DINOv2EncoderHub
+from src.models.core.module.fusions import FusionConcat
+from src.models.core.module.category import EmbeddingGenerator
+from src.models.core.module.head_module import Classifier
+from src.models.core.module.dmattention import TransformerEncoderWithAttn
+
+from src.models.core.module.sequences import (
+    PositionalEmbedding,
+    SequencePoolMean,
+    TemporalWeightedMeanPool
+)
+
+from src.models.core.utils.groups import create_group_matrix
 
 class MyModel(nn.Module):
     def __init__(
@@ -49,7 +46,6 @@ class MyModel(nn.Module):
         cat_idxs: list = [],
         cat_dims: list = [],
         cat_emb_dim: list = [],
-        d_model: int = 256,
         nhead: int = 8,
         ff_dim: int = 512,
         num_layers: int = 2,
@@ -83,6 +79,8 @@ class MyModel(nn.Module):
         self.image_input_size = image_input_size
         self.multimodal_setting = multimodal_setting
         self.image_feat_dim = image_feat_dim
+
+        self.dropout_branch = nn.Dropout(p=dropout)
 
         self.group_matrix = create_group_matrix(self.grouped_features, self.input_dim)
 
@@ -128,21 +126,20 @@ class MyModel(nn.Module):
         )
 
         if self.multimodal_setting:
-            # 1) DINOv2 백본은 freeze 모드로 생성
+            # 1) DINOv2 freeze 모드
             self.image_encoder = DINOv2EncoderHub(
                 model_name=self.image_encoder_model,
                 freeze_backbone=True,
             )
 
             # 2) DINO feature (image_feat_dim) → n_d 로 가는 MLP head
-            mlp_hidden_dim = self.n_d * 2 # 필요하면 따로 하이퍼파라미터로 빼셔도 됩니다.
+            mlp_hidden_dim = self.n_d * 2
             self.image_mlp = nn.Sequential(
                 nn.Linear(self.image_feat_dim, mlp_hidden_dim),
                 nn.GELU(),
                 nn.Linear(mlp_hidden_dim, mlp_hidden_dim),
                 nn.GELU(),
                 nn.Linear(mlp_hidden_dim, self.n_d),
-
             )
 
         self.fuse_mpie_mpde = nn.Linear(2 * self.n_d, self.n_d)
@@ -203,30 +200,32 @@ class MyModel(nn.Module):
     def time_series_grouping(
         self,
         x: torch.Tensor,
-        shape: torch.Tensor,
+        shape: tuple,
     ):
-        if len(shape) == 3:
-            B, S, F = shape
-            x_grouped = x.view(B, S, -1)
-            return x_grouped
+        B, S, F = shape
+        x_grouped = x.view(B, S, -1)
+        return x_grouped
 
-        return x
 
-    """
-    결측 값을 0으로 변환
-    todo: 나중에 평균 또는 다른 방법으로 전환하는 세팅을 추가하면 어떨지
-    """
     def _convert_zero_nan(self, x: torch.Tensor, x_bemv: torch.Tensor):
         missing_mask = (x_bemv == 0)
         x = x.clone()
         x[missing_mask] = 0.0
         return x
 
-    def forward(self, x: torch.Tensor, x_bemv: torch.Tensor, x_img: torch.Tensor = None):
-        B, S, F = x.shape
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_bemv: torch.Tensor,
+        x_img: torch.Tensor = None
+    ):
+        # 원본 x의 shape
+        x_shape = x.shape
 
+        # x_bemv에 해당하는 결측치를 x에 0으로 대체
         x = self._convert_zero_nan(x, x_bemv)
 
+        # 시계열 데이터를 B*S, F 형태로 변환
         x_flat = self.time_series_serialization(x)
         x_bemv_flat = self.time_series_serialization(x_bemv)
 
@@ -234,11 +233,13 @@ class MyModel(nn.Module):
 
         step_outputs_mpde, M_loss_mpde, att_dep = self.mpde(x_flat, x_bemv_flat)
         mpde_feat_flat = torch.sum(torch.stack(step_outputs_mpde, dim=0), dim=0)
-        mpde_feat = self.time_series_grouping(mpde_feat_flat, x.shape)
+        mpde_feat = self.time_series_grouping(mpde_feat_flat, x_shape)
+
 
         step_outputs_mpie, M_loss_mpie, mpie_attention_maps = self.mpie(x_flat, x_bemv_flat)
         mpie_feat_flat = torch.sum(torch.stack(step_outputs_mpie, dim=0), dim=0)
-        mpie_feat = self.time_series_grouping(mpie_feat_flat, x.shape)
+        mpie_feat = self.time_series_grouping(mpie_feat_flat, x_shape)
+
 
         z_mpie = self.mpie_proj(mpie_feat)
         z_mpie = self.activate(z_mpie)
@@ -249,6 +250,9 @@ class MyModel(nn.Module):
         z_mpde = self.activate(z_mpde)
         z_mpde, tr_attn_mpde = self.mpde_transformer(z_mpde)
         h_mpde = self.pool_mpde(z_mpde)
+
+        h_mpie = self.dropout_branch(h_mpie)
+        h_mpde = self.dropout_branch(h_mpde)
 
         branch_tokens = [h_mpie, h_mpde]
 
@@ -275,24 +279,25 @@ class MyModel(nn.Module):
         branch_seq = torch.stack(branch_tokens, dim=1)
         branch_out, branch_attn = self.branch_attn(branch_seq, branch_seq, branch_seq)
 
+
         B_out, T_out, D_out = branch_out.shape
         h_final = branch_out.reshape(B_out, T_out * D_out)
+
 
         h_final = self.before_classifier(h_final)
         h_final = self.activate(h_final)
         h_final = self.before_classifier_2(h_final)
-        h_final = self.activate(h_final)
 
-        outs = self.classifier(h_final)
+        latent = self.activate(h_final)
+
+        outs = self.classifier(latent)
 
         M_loss_total = M_loss_mpie + M_loss_mpde
 
-        tr_attn_maps = {
-            "mpde_att_dep": att_dep,
-            "mpie_attention_maps": mpie_attention_maps,
-            "mpie": tr_attn_mpie,
-            "mpde": tr_attn_mpde,
-            "branch": branch_attn,
+        results = {
+            "latent": latent,
+            "outs": outs,
+            "M_loss_total": M_loss_total,
         }
 
-        return outs, M_loss_total, tr_attn_maps
+        return results

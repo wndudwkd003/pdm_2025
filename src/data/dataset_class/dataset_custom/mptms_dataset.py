@@ -9,10 +9,12 @@ class MPTMSDataset(BaseDataset):
         super().__init__()
         self.jsonl_files = [Path(p) for p in jsonl_files]
         self.meta = {}
+        self.feature_dim = None
+        self.seq_length = None
         self.load_data()
 
     def load_data(self):
-        samples: list[dict[str, Any]] = []
+        samples = []
         for fpath in self.jsonl_files:
             with open(fpath, "r", encoding="utf-8") as f:
                 objs = [json.loads(line.strip()) for line in f]
@@ -21,5 +23,12 @@ class MPTMSDataset(BaseDataset):
         self.samples = samples
         self.meta = self.samples[0]["metadata"]
 
-    def __getitem__(self, index: int) -> dict[str, Any]:
+
+        continuous_cols = self.meta["continuous_cols"]
+        categorical_cols = self.meta["categorical_cols"]
+
+        self.feature_dim = len(continuous_cols) + len(categorical_cols)
+        self.seq_length = self.meta["forward"]
+
+    def __getitem__(self, index: int):
         return self.samples[index]

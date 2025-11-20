@@ -9,4 +9,5 @@ def get_mptms_dataset_class():
 
 DATASET_MAP = {
     DatasetType.MPTMS: get_mptms_dataset_class,
+    DatasetType.CMPASS: get_mptms_dataset_class,
 }

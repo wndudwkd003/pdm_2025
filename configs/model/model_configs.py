@@ -10,13 +10,15 @@ class BaseModelConfig:
     num_workers: int = 1
     drop_last: bool = True
     pin_memory: bool = True
-    max_epochs: int = 50
-    learning_rate: float = 2e-3 # 1e-3
-    weight_decay: float = 2e-4
+    max_epochs: int = 100
+    learning_rate: float = 1e-3 # 1e-3
+    weight_decay: float = 1e-4
     patience_count: int = 10
     num_classes: int = 4
     save_model_name: str = "save_model"
     multimodal_setting: bool = False
+    device: str = "cuda"
+    training_mode: str = "pretrain"  # "pretrain" or "finetune"
 
 
 
@@ -30,9 +32,9 @@ class MyModelConfig(BaseModelConfig):
     output_dims: Sequence[int] = (4,) * 10
 
 
-    min_learning_rate: float = 1e-5
+    min_learning_rate: float = 1e-4
     lambda_sparse: float = 1e-3
-    lambda_recon: float = 1.5
+    lambda_recon: float = 1.0
 
 
     # TabNet / MPIE / MPDE 관련 하이퍼파라미터
@@ -47,12 +49,14 @@ class MyModelConfig(BaseModelConfig):
     bias: bool = True
     epsilon: float = 1e-6
     gamma: float = 1.0
+    lambda_contrast: float = 1.0
+    contrastive_temperature: float = 0.7
+    training_mode: str = "pretrain"  # "pretrain" or "finetune"
 
     # Transformer 관련
-    d_model: int = 256
     nhead: int = 8
     ff_dim: int = 512
-    num_layers: int = 2
+    num_layers: int = 4
     dropout: float = 0.1
     max_seq_len: int = 256
 
