@@ -31,5 +31,6 @@ MODEL_CONFIG_MAP = {
     ModelType.XGBOOST: get_xgboost_model_config,
     ModelType.TABM: get_tabm_model_config,
     ModelType.MYMODEL: get_my_model_config,
+    ModelType.MYMODEL2: get_my_model_config,
 }
 

@@ -247,7 +247,6 @@ class MyModelTrainer(BaseTrainer):
         optimizer = torch.optim.AdamW(
             model.parameters(),
             lr=self.model_config.learning_rate,
-            weight_decay=self.model_config.weight_decay,
         )
 
         scheduler = CosineAnnealingLR(
@@ -311,7 +310,7 @@ class MyModelTrainer(BaseTrainer):
             metrics_float = {}
             for k in val_metrics:
                 v = val_metrics[k]
-                metrics_float[k] = float(v)
+                metrics_float[k] = v
             history["val_metrics"].append(metrics_float)
             history["num_samples"].append(num_samples)
 

@@ -27,6 +27,10 @@ COLLATOR_MAP = {
     (DatasetType.CMPASS, ModelType.MYMODEL): get_mptms_mymodel_collator_class,
 
 
+    (DatasetType.MPTMS, ModelType.MYMODEL2): get_mptms_mymodel_collator_class,
+    (DatasetType.CMPASS, ModelType.MYMODEL2): get_mptms_mymodel_collator_class,
+
+
 
     (DatasetType.CMPASS, ModelType.XGBOOST): get_mptms_tabnet_collator_class,
 }

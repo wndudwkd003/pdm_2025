@@ -44,13 +44,15 @@ def main(cfg: Config):
             csv_has_header=cfg.csv_has_header,
             seed=cfg.seed,
             multimodal_setting=model_config.multimodal_setting,
+            masking_scinario_augmentation=cfg.masking_scinario_augmentation,
+            masking_ratio_pro=cfg.masking_ratio_pro,
         ),
         # 모델 설정은 ConfigManager를 통해 가져옴
         model_config=model_config,
         metadata=metadata
     )
 
-    trainer.load(LOAD_MODEL / "final")
+    trainer.load(LOAD_MODEL / "final" / "save_model")
 
 
     results = trainer.eval(test_dataset=test_ds) # , tde=tde)

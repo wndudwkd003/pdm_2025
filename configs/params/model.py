@@ -9,3 +9,4 @@ class ModelType(Enum):
     BASIC_TABULAR = "basic_tabular"
     TABM = "TabM"
     MYMODEL = "mymodel"
+    MYMODEL2 = "mymodel2"

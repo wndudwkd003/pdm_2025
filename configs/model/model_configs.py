@@ -11,14 +11,14 @@ class BaseModelConfig:
     drop_last: bool = True
     pin_memory: bool = True
     max_epochs: int = 100
-    learning_rate: float = 1e-3 # 1e-3
+    learning_rate: float = 1e-3  # 1e-3 # 3e-4 # 1e-3 # 1e-3
     weight_decay: float = 1e-4
     patience_count: int = 10
     num_classes: int = 4
     save_model_name: str = "save_model"
     multimodal_setting: bool = False
     device: str = "cuda"
-    training_mode: str = "pretrain"  # "pretrain" or "finetune"
+    training_mode: str = "finetune"  # "pretrain" or "finetune"
 
 
 
@@ -32,7 +32,7 @@ class MyModelConfig(BaseModelConfig):
     output_dims: Sequence[int] = (4,) * 10
 
 
-    min_learning_rate: float = 1e-4
+    min_learning_rate: float = 1e-4 # 1e-4
     lambda_sparse: float = 1e-3
     lambda_recon: float = 1.0
 
@@ -51,7 +51,6 @@ class MyModelConfig(BaseModelConfig):
     gamma: float = 1.0
     lambda_contrast: float = 1.0
     contrastive_temperature: float = 0.7
-    training_mode: str = "pretrain"  # "pretrain" or "finetune"
 
     # Transformer 관련
     nhead: int = 8

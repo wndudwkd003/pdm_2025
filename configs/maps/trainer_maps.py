@@ -27,6 +27,13 @@ def get_my_model_trainer():
     return MyModelTrainer
 
 
+def get_my_model2_trainer():
+    from src.models.trainer.custom_trainer.my_trainer2 import HybridModelTrainer
+    return HybridModelTrainer
+
+
+
+
 TRAINER_MAP = {
     ModelType.TABNET: get_tabnet_trainer,
     ModelType.XGBOOST: get_xgb_trainer,
@@ -34,4 +41,5 @@ TRAINER_MAP = {
     ModelType.TABNET_PYTABULAR: get_tabnet_2_trainer,
     ModelType.TABM: get_tabm_trainer,
     ModelType.MYMODEL: get_my_model_trainer,
+    ModelType.MYMODEL2: get_my_model2_trainer,
 }

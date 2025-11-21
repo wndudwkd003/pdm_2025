@@ -15,13 +15,13 @@ class Config:
     test: str = "test"
     split_ratio: float = 0.2
 
-    model_type: ModelType = ModelType.MYMODEL # MYMODEL
+    model_type: ModelType = ModelType.MYMODEL2 # MYMODEL MYMODEL2
 
     save_dir: str = "outputs"
 
     # 마스킹 비율
-    masking_ratio: float = 0.8
-    masking_scinario_augmentation: bool = False
+    masking_ratio: float = 0.6
+    masking_scinario_augmentation: bool = True
     masking_ratio_pro: float = 0.1
 
 
@@ -40,4 +40,4 @@ class Config:
 
 
     # === Test용 모델 로드 경로 ===
-    load_model: str = "outputs/2025-11-20_07-22-24_mymodel_mptms_mcar_0.8"
+    load_model: str = "outputs/2025-11-20_17-26-41_mymodel2_mptms_mcar_0.6"
