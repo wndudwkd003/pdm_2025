@@ -140,6 +140,12 @@ def main(cfg: Config):
 
     train_loader = build_dataloader(train_ds, cfg)
     valid_loader = build_dataloader(valid_ds, cfg)
+
+    # for test
+
+    cfg.masking_scinario_augmentation = False
+    cfg.masking_ratio_pro = 0.0
+
     test_loader = build_dataloader(test_ds, cfg)
 
     # 임베딩 + 원본(flat) concat, 그리고 왼쪽 더하기 버전 둘 다 추출

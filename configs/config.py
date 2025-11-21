@@ -40,4 +40,4 @@ class Config:
 
 
     # === Test용 모델 로드 경로 ===
-    load_model: str = "outputs/2025-11-20_17-26-41_mymodel2_mptms_mcar_0.6"
+    load_model: str = "outputs/2025-11-21_03-36-05_mymodel2_mptms_mcar_0.4"
